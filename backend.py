@@ -1,13 +1,46 @@
-"""Bounded stock-USA ship editing. No save access and no engine extensions."""
-import hashlib,json,struct,zipfile
+"""Stock-USA ship editing plus1..5 independent additive hulls; no save writes."""
+import hashlib,json,struct,zipfile,copy
 from decimal import Decimal,InvalidOperation
 from pathlib import Path
 
 ROM_SHA='64bc4707f422661a66618088887e2363a5f896ea683c58984fffd96dd21ab5f0'
-TOOL_VERSION='0.1.0'
+TOOL_VERSION='0.2.0'
 MODEL_BASE=0x8cbb6
 SPEC_BASE=0x8ce27
 FIELDS=('name','hull','turning','power','max_guns','min_crew','max_crew','price_gold')
+EDIT_FIELDS=FIELDS+('capacity','factory_cargo')
+UPDATE_FIELDS=EDIT_FIELDS+('yard_cargo',)
+EXTRA_FIELDS=('base_hull','capacity','industry','factory_guns','factory_crew','ports')
+CAPITALS=(0,1,2,8,29,33,77)
+
+def ports(rom):
+    from ports import PORT_NAMES
+    return [dict(id=i,name=PORT_NAMES[i],industry=int.from_bytes(rom[0x8da83+i*37:0x8da85+i*37],'little'),
+        group=rom[0x8da7f+i*37+34],capital=i in CAPITALS) for i in range(100)]
+
+def validate_extra(s,rom):
+    if not isinstance(s,dict):raise ValueError('Each added ship must be a ship record.')
+    expected=set(decode(rom)[0])|{'base_hull','ports'}
+    if set(s)!=expected:raise ValueError('Unknown or missing added-ship fields.')
+    if type(s['id'])is not int or not 25<=s['id']<30:raise ValueError('Added ship ID outside25..29.')
+    if type(s['base_hull'])is not int or not 0<=s['base_hull']<25:raise ValueError('Choose an original hull for graphics and build-time family.')
+    dummy=dict(s);dummy.pop('base_hull');dummy.pop('ports')
+    # Added ships have fully editable allocations; apply the common bounds without stock grandfathering.
+    validate(dummy,dict(dummy))
+    for k,lo,hi in [('capacity',1,2000),('industry',0,1000),('factory_guns',0,150),('factory_crew',1,500)]:
+        if type(s[k])is not int or not lo<=s[k]<=hi:raise ValueError(f'{k.replace("_"," ")} must be {lo}–{hi}.')
+    if s['industry']%10:raise ValueError('Industry requirement must be a multiple of10.')
+    if s['factory_guns']>s['max_guns']or not s['min_crew']<=s['factory_crew']<=s['max_crew']:
+        raise ValueError('Factory guns/crew must fit the ship limits.')
+    cargo=s['capacity']-s['factory_guns']-s['factory_crew']
+    if cargo<0 or s['factory_cargo']!=cargo:raise ValueError('Capacity must cover factory guns and crew; remaining space is cargo.')
+    ps=s['ports']
+    if not isinstance(ps,list)or not ps or any(type(p)is not int or not 0<=p<100 for p in ps)or len(set(ps))!=len(ps):raise ValueError('Choose at least one valid port, without duplicates.')
+    catalog=ports(rom)
+    for p in ps:
+        if catalog[p]['group']>=11:raise ValueError('This port has no supported shipyard stock group.')
+        if catalog[p]['capital']and s['industry']>catalog[p]['industry']:
+            raise ValueError(f'{catalog[p]["name"]} cannot reach industry {s["industry"]}; its fixed starting industry is {catalog[p]["industry"]}.')
 
 def sha(data):return hashlib.sha256(data).hexdigest()
 
@@ -38,12 +71,12 @@ def decode(rom):
 
 def validate(row,original):
     if set(row)!=set(original):raise ValueError('Unknown or missing ship fields.')
-    for key in set(original)-set(FIELDS):
-        if row[key]!=original[key]:raise ValueError(f'{key} is read-only in version 1.')
+    for key in set(original)-set(EDIT_FIELDS):
+        if row[key]!=original[key]:raise ValueError(f'{key} is read-only for original ships.')
     name=row['name']
     if not isinstance(name,str)or not name.strip()or len(name)>17 or '%'in name or any(ord(c)<32 or ord(c)>126 for c in name):
         raise ValueError('Ship names need 1–17 printable English characters, without %.')
-    ranges=dict(hull=(1,100),turning=(1,100),power=(1,100),max_guns=(0,150),min_crew=(1,255),max_crew=(10,500),price_gold=(10,320000))
+    ranges=dict(hull=(1,100),turning=(1,100),power=(1,100),max_guns=(0,150),min_crew=(1,255),max_crew=(10,500),price_gold=(10,320000),capacity=(1,2000),factory_cargo=(0,2000))
     for key,(low,high)in ranges.items():
         if type(row[key])is not int or not low<=row[key]<=high:raise ValueError(f'{key.replace("_"," ")} must be a whole number from {low} to {high}.')
     if row['max_crew']%10:raise ValueError('Maximum crew must be a multiple of 10.')
@@ -53,6 +86,30 @@ def validate(row,original):
         raise ValueError('The gun limit cannot be below the factory gun allocation.')
     if row['max_crew']!=original['max_crew'] and row['max_crew']<original['factory_crew']:
         raise ValueError('The crew limit cannot be below the existing factory crew allocation.')
+    if row['capacity']!=row['factory_guns']+row['factory_crew']+row['factory_cargo']:
+        raise ValueError('Total capacity must equal factory guns + crew spaces + cargo.')
+    if row['capacity']<row['max_guns']+row['max_crew']:
+        raise ValueError('Total capacity must cover the maximum gun and crew spaces; shipyard cargo cannot be negative.')
+
+def fit_values(previous,values):
+    values=copy.deepcopy(values);yard=values.pop('yard_cargo',None)
+    if yard is not None and (type(yard)is not int or yard<0):raise ValueError('Shipyard cargo capacity needs a nonnegative whole number.')
+    row=copy.deepcopy(previous);row.update(values)
+    for key in ('capacity','factory_guns','factory_crew','factory_cargo'):
+        if type(row[key])is not int:raise ValueError(key.replace('_',' ')+' needs a whole number.')
+    cargo_changed='factory_cargo'in values and row['factory_cargo']!=previous['factory_cargo']
+    capacity_changed='capacity'in values and row['capacity']!=previous['capacity']
+    used=row['factory_guns']+row['factory_crew']
+    if yard is not None:
+        wanted=yard+row['max_guns']+row['max_crew']
+        if not capacity_changed and not cargo_changed:
+            row['capacity']=wanted;capacity_changed=wanted!=previous['capacity']
+        elif row['capacity']!=wanted:raise ValueError('Shipyard cargo capacity disagrees with total capacity and gun/crew limits.')
+    if cargo_changed and not capacity_changed:row['capacity']=used+row['factory_cargo']
+    elif capacity_changed and cargo_changed:
+        if row['capacity']!=used+row['factory_cargo']:raise ValueError('Cargo and total capacity disagree with the factory guns/crew.')
+    else:row['factory_cargo']=row['capacity']-used
+    return row
 
 def price_from_bars(value):
     try:
@@ -63,10 +120,10 @@ def price_from_bars(value):
 
 def ips(base,modified):
     output=bytearray(b'PATCH');at=0
-    while at<len(base):
-        if base[at]==modified[at]:at+=1;continue
+    while at<len(modified):
+        if at<len(base)and base[at]==modified[at]:at+=1;continue
         start=at
-        while at<len(base)and base[at]!=modified[at]and at-start<65535:at+=1
+        while at<len(modified)and (at>=len(base)or base[at]!=modified[at])and at-start<65535:at+=1
         payload=modified[start:at];output+=start.to_bytes(3,'big')+len(payload).to_bytes(2,'big')+payload
     return bytes(output+b'EOF')
 
@@ -78,6 +135,7 @@ def apply_ips(base,patch):
         if n:payload=patch[at:at+n];at+=n
         else:
             n=int.from_bytes(patch[at:at+2],'big');payload=patch[at+2:at+3]*n;at+=3
+        if offset+len(payload)>len(data):data.extend(b'\0'*(offset+len(payload)-len(data)))
         data[offset:offset+len(payload)]=payload
     return bytes(data)
 
@@ -88,17 +146,40 @@ class ShipProject:
         self.project_path=None
 
     def update(self,i,values):
-        if type(i)is not int or not 0<=i<25:raise ValueError('Invalid ship ID.')
-        if set(values)-set(FIELDS):raise ValueError('Unknown editable fields.')
-        row=dict(self.ships[i]);row.update(values);validate(row,self.original[i]);self.ships[i]=row
+        if type(i)is not int or not 0<=i<len(self.ships):raise ValueError('Invalid ship ID.')
+        if i>=25:
+            if set(values)-set(UPDATE_FIELDS+EXTRA_FIELDS):raise ValueError('Unknown added-ship fields.')
+            row=fit_values(self.ships[i],values)
+            validate_extra(row,self.rom);self.ships[i]=row;return
+        if set(values)-set(UPDATE_FIELDS):raise ValueError('Unknown editable fields.')
+        row=fit_values(self.ships[i],values);validate(row,self.original[i]);self.ships[i]=row
 
     def changes(self):
-        for i,row in enumerate(self.ships):validate(row,self.original[i])
-        return [dict(id=i,field=k,before=self.original[i][k],after=s[k])for i,s in enumerate(self.ships)for k in FIELDS if s[k]!=self.original[i][k]]
+        if not 25<=len(self.ships)<=30:raise ValueError('You may add up to five ships.')
+        for i,row in enumerate(self.ships):
+            if i<25:validate(row,self.original[i])
+            else:validate_extra(row,self.rom)
+        return [dict(id=i,field=k,before=self.original[i][k],after=s[k])for i,s in enumerate(self.ships[:25])for k in EDIT_FIELDS if s[k]!=self.original[i][k]]
+
+    def add_ship(self,base_hull=10):
+        if len(self.ships)>=30:raise ValueError('This version supports five added ships.')
+        if type(base_hull)is not int or not 0<=base_hull<25:raise ValueError('Invalid original hull.')
+        s=dict(self.ships[base_hull]);s.update(id=len(self.ships),name=f'New Ship {len(self.ships)-24}',base_hull=base_hull,ports=[0],industry=0)
+        # Some stock factory crews exceed their refit cap; new ships must be internally consistent.
+        s['max_crew']=max(s['max_crew'],((s['factory_crew']+9)//10)*10)
+        s['factory_crew']=max(s['factory_crew'],s['min_crew'])
+        s['factory_cargo']=s['capacity']-s['factory_guns']-s['factory_crew']
+        s['capacity']=s['factory_guns']+s['factory_crew']+s['factory_cargo']
+        validate_extra(s,self.rom);self.ships.append(s);return s['id']
+
+    def remove_ship(self,i):
+        if type(i)is not int or not 25<=i<len(self.ships):raise ValueError('Only added ships can be removed.')
+        self.ships.pop(i)
+        for n,s in enumerate(self.ships):s['id']=n
 
     def manifest(self):
-        return dict(format='new-horizons-ship-project',version=1,base_sha256=ROM_SHA,
-            edits=[dict(id=c['id'],field=c['field'],value=c['after'])for c in self.changes()])
+        return dict(format='new-horizons-ship-project',version=2,base_sha256=ROM_SHA,
+            edits=[dict(id=c['id'],field=c['field'],value=c['after'])for c in self.changes()],added_ships=copy.deepcopy(self.ships[25:]))
 
     def save_project(self,path):
         path=Path(path).resolve()
@@ -112,34 +193,53 @@ class ShipProject:
 
     def load_project(self,path):
         path=Path(path).resolve();m=json.loads(path.read_text(encoding='utf-8-sig'))
-        if set(m)!= {'format','version','base_sha256','edits'}or m['format']!='new-horizons-ship-project'or type(m['version'])is not int or m['version']!=1 or m['base_sha256']!=ROM_SHA or not isinstance(m['edits'],list):
+        if not isinstance(m,dict):raise ValueError('Unsupported project: expected a ship project object.')
+        keys={'format','version','base_sha256','edits'}|({'added_ships'}if m.get('version')==2 else set())
+        if set(m)!=keys or m['format']!='new-horizons-ship-project'or type(m['version'])is not int or m['version']not in (1,2)or m['base_sha256']!=ROM_SHA or not isinstance(m['edits'],list):
             raise ValueError('Unsupported project or ROM revision.')
         rows=[dict(s)for s in self.original];seen=set()
         for e in m['edits']:
-            if not isinstance(e,dict)or set(e)!={'id','field','value'}or type(e['id'])is not int or not 0<=e['id']<25 or e['field']not in FIELDS:
+            if not isinstance(e,dict)or set(e)!={'id','field','value'}or type(e['id'])is not int or not 0<=e['id']<25 or e['field']not in EDIT_FIELDS:
                 raise ValueError('Invalid project edit.')
             key=(e['id'],e['field'])
             if key in seen:raise ValueError('Duplicate project edit.')
             seen.add(key);rows[e['id']][e['field']]=e['value']
         for i,row in enumerate(rows):validate(row,self.original[i])
+        added=m.get('added_ships',[])
+        if not isinstance(added,list)or len(added)>5:raise ValueError('Project supports at most five added ships.')
+        for n,s in enumerate(added):
+            validate_extra(s,self.rom)
+            if s['id']!=25+n:raise ValueError('Added ship IDs must be consecutive.')
+        rows.extend(added)
         self.ships=rows;self.project_path=path
 
     def build(self):
         changes=self.changes()
-        if not changes:return self.rom,[]
-        data=bytearray(self.rom)
+        if not changes and len(self.ships)==25:return self.rom,[]
+        if len(self.ships)>25:
+            from expansion import make_fleet
+            catalog=ports(self.rom)
+            additions=[dict(id=s['id'],name=s['name'],base_hull=s['base_hull'],industry_required=s['industry'],
+                base_durability=s['hull'],turning=s['turning'],power=s['power'],max_crew=s['max_crew'],min_crew=s['min_crew'],
+                total_capacity=s['capacity'],max_guns=s['max_guns'],price_units=s['price_gold']//10,
+                default=dict(guns=s['factory_guns'],crew_space=s['factory_crew'],cargo_space=s['factory_cargo']),
+                stock_ports=s['ports'],stock_groups=sorted({catalog[p]['group']for p in s['ports']}))for s in self.ships[25:]]
+            compiled,_=make_fleet(self.rom,dict(ships=additions));data=bytearray(compiled)
+        else:data=bytearray(self.rom)
         offsets=dict(hull=1,turning=2,power=3,max_crew=4,min_crew=5,max_guns=8,price_gold=10)
         for c in changes:
             i=c['id'];field=c['field'];value=c['after']
             if field=='name':
                 at=MODEL_BASE+i*25;data[at:at+18]=value.encode('ascii').ljust(18,b'\0')
+            elif field=='factory_cargo':struct.pack_into('<H',data,MODEL_BASE+i*25+23,value)
+            elif field=='capacity':struct.pack_into('<H',data,SPEC_BASE+i*12+6,value)
             else:
                 at=SPEC_BASE+i*12+offsets[field]
                 if field=='price_gold':struct.pack_into('<H',data,at,value//10)
                 else:data[at]=value//10 if field=='max_crew'else value
         data[0xffdc:0xffe0]=b'\xff\xff\0\0';check=sum(data)&65535
         struct.pack_into('<HH',data,0xffdc,check^65535,check)
-        assert len(data)==len(self.rom)and sum(data)&65535==check
+        assert len(data)in (0x200000,0x400000)and sum(data)&65535==check
         return bytes(data),changes
 
     def export(self,path):
@@ -150,7 +250,7 @@ class ShipProject:
         if any(p.exists()for p in targets):raise ValueError('An output file already exists. Choose a new filename to preserve previous versions.')
         rom,changes=self.build();patch=ips(self.rom,rom);assert apply_ips(self.rom,patch)==rom
         report=dict(tool='New Horizons Ship Editor',tool_version=TOOL_VERSION,base_sha256=ROM_SHA,output_sha256=sha(rom),
-            input_header_removed=bool(self.header),output_headerless=True,changed_fields=changes,
+            input_header_removed=bool(self.header),output_headerless=True,changed_fields=changes,added_ships=self.ships[25:],
             ips_base='Original unheadered USA New Horizons ROM',runtime_tested=False,
             note='Data validation and patch reconstruction passed. Edited gameplay balance still needs emulator testing.')
         path.parent.mkdir(parents=True,exist_ok=True)

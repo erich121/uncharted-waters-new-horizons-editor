@@ -43,6 +43,20 @@ python smoke_test.py
 
 The ROM-backed unit tests skip when no stock ROM is available. The GUI smoke test needs a compatible ROM and a working Windows graphical session.
 
+The editor also provides a functional check that drives its real buttons and
+list clicks, using temporary project/export files and supplied file-picker
+choices. Run it from source or with the packaged executable:
+
+```powershell
+python app.py --workflow-test "C:\path\to\New Horizons (USA).sfc" --report "workflow-result.json"
+& ".\New Horizons Ship Editor.exe" --workflow-test "C:\path\to\New Horizons (USA).sfc" --report "workflow-result.json"
+```
+
+It checks total-capacity editing and read-only calculated cargo, port replacement/multi-selection,
+all five additions, save/load, ROM/IPS export, restore/remove and validation
+feedback in a 640x480 window. A PASS report does not establish a full campaign
+playthrough. Test the rebuilt executable as well as the source before release.
+
 ### Supported base ROM
 
 The editor validates the original USA game using this **SHA-256** checksum (for the ROM data without a 512-byte copier header):
@@ -51,7 +65,7 @@ The editor validates the original USA game using this **SHA-256** checksum (for 
 64bc4707f422661a66618088887e2363a5f896ea683c58984fffd96dd21ab5f0
 ```
 
-Other regions, revisions, and previously patched ROMs are not supported in v0.1.0. Do not commit or distribute copyrighted ROMs, save files, or extracted game assets.
+Other regions, revisions, and previously patched ROMs are not supported in v0.2.0. Do not commit or distribute copyrighted ROMs, save files, or extracted game assets.
 
 ## Build the Windows executable
 
@@ -67,7 +81,7 @@ Then run the included build script:
 .\build.ps1
 ```
 
-For version `0.1.0`, the script creates a versioned output folder at `dist/v0.1.0/`, containing the executable and accompanying documentation. The script refuses to overwrite an existing version folder.
+For version `0.2.0`, the script creates a versioned output folder at `dist/v0.2.0/`, containing the executable, accompanying documentation and MIT LICENSE. The script refuses to overwrite an existing version folder.
 
 Test the packaged executable on Windows before publishing it. The presence of a successful build alone does not establish gameplay compatibility.
 
@@ -78,14 +92,26 @@ Test the packaged executable on Windows before publishing it. The presence of a 
 3. Run the unit tests and Tkinter smoke test using a compatible stock ROM.
 4. Build the executable with `build.ps1`, then launch and smoke-test the packaged application.
 5. Test representative edits and exports in an emulator. Verify that IPS output reproduces the intended ROM changes.
-6. Package the Windows download ZIP with its version-specific `README.txt`; generate and verify checksums for the final package.
-7. Commit the source and documentation to GitHub. Create a matching tag (for example, `v0.1.0`) and a **GitHub Release**, attaching the Windows ZIP and concise release notes.
+6. Package the Windows ZIP as `New Horizons Editor vVERSION.zip`, with all
+   files inside `New Horizons Editor vVERSION/`. Package source as
+   `New Horizons Editor Source vVERSION.zip`, inside a matching named folder.
+   Include the release README, changelog, VERSION and MIT LICENSE. Keep
+   documentation dates and versions consistent; use the public GitHub project
+   and issue links. Generate and verify checksums for the final package.
+7. Commit the source and documentation to GitHub. Create a matching tag (for example, `v0.2.0`) and a **GitHub Release**, attaching the Windows ZIP and concise release notes.
 8. Keep previously published releases available and unchanged. Publish corrections under a new version number.
 
 The repository's main README describes the latest release. Git tags preserve the source and documentation associated with each older release.
 
 ## Scope
 
-Version 0.1.0 edits existing ship data only; it does not add new ship classes or alter the game's engine. Gameplay balance and full-campaign compatibility remain matters for emulator testing.
+Version 0.2.0 edits the supported original ship data and adds up to five
+independent hull classes. `expansion.py` compiles the required native hooks,
+tables and reset initialization from the supplied stock game; `ports.py`
+contains port labels. No ROM data or extracted artwork is bundled.
+
+The stock economy, items, shops, stories, enemy-fleet assignments and battle
+controls are not replaced. The new classes reuse original graphics.
+Gameplay balance and full-campaign compatibility still require playtesting.
 
 The editor is an independent fan-made tool and does not include game ROMs, extracted artwork, or private research workspace data.

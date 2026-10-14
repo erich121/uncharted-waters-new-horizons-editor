@@ -1,11 +1,12 @@
 NEW HORIZONS SHIP EDITOR
-Version 0.1.0 Beta | October 14, 2026 | Windows
+Version 0.2.0 Beta | October 14, 2026 | Windows
 
 A ship-data editor for the original USA SNES release of
 Uncharted Waters: New Horizons.
 
-Change the original game's 25 ship classes, save your work as a project,
-and export a modified ROM for testing or an IPS patch for sharing.
+Edit the original game's 25 ship classes and add up to five new classes.
+Save your work as a project, then export a modified ROM for testing or
+an IPS patch for sharing.
 
 
 GETTING STARTED
@@ -26,8 +27,37 @@ GETTING STARTED
 To reopen a project, first open the original USA ROM, then click
 "Open project" and choose your saved .json file.
 
+When the window is smaller, use the vertical/horizontal scrollbars to reach
+all controls. The mouse wheel scrolls vertically; Shift + mouse wheel scrolls
+horizontally. Tab brings the focused field into view. Ship and port lists
+have their own scrollbars.
 
-WHAT YOU CAN EDIT IN v0.1.0
+Build layout4 groups settings into name/price, handling, gun/crew limits,
+capacity and starting equipment. Availability has artwork, industry and port
+sections. Cargo is calculated and read-only. Add/Remove and Apply/Restore stay
+visible; lists and settings scroll independently. Title: v0.2.0 [layout4].
+
+ADDING A NEW SHIP
+-----------------
+1. Select an original ship and click "Add ship (up to 5)" to copy its
+   starting specifications into a new, independent class.
+2. On "Specifications", set its name, stats, price, total capacity,
+   factory guns and factory crew spaces. Remaining capacity becomes cargo.
+3. On "Availability and graphics", choose an original visual family.
+   This changes the reused graphics and description, not the current stats.
+4. Select ports with Ctrl-click and set the minimum industry.
+   Port rows show starting industry. Fixed capitals cannot be developed,
+   so the editor rejects requirements above their starting industry.
+5. Apply changes, save the project and export to a new filename.
+
+New ships may appear occasionally in fresh used stock at eligible ports.
+The existing stock cache remains; offers need not update immediately.
+New ship classes are not automatically assigned to enemy fleets.
+The industry requirement is per ship, not a different value for every port.
+Projects saved by v0.1.0 still load; new saves use project format version 2.
+
+
+WHAT YOU CAN EDIT IN v0.2.0
 ---------------------------
 All 25 original ship classes:
 
@@ -39,12 +69,27 @@ All 25 original ship classes:
   - Minimum sailors
   - Maximum crew spaces
   - Base purchase price
+  - Total capacity (cargo is calculated automatically)
 
 Prices are entered in GOLD BARS: 1 bar = 10,000 gold.
 For example, 2.5 bars = 25,000 gold.
 
-Some other ship information is displayed for reference but cannot be
-changed in this release.
+For up to FIVE added ship classes:
+
+  - All the specifications and base price listed above
+  - Total capacity and factory guns / crew spaces
+  - Factory cargo, calculated from the remaining capacity
+  - Original ship used for the portrait, map/battle graphics and description
+  - One or more ports where the ship can be built
+  - Minimum industry, shared by all selected ports for that ship
+
+Total capacity is editable; both cargo displays are read-only. Shipyard cargo
+is total minus maximum guns and maximum crew spaces, matching the shipyard
+screen. Cargo when first built is total minus starting guns and starting crew.
+These can differ on stock ships. Changing capacity or allocations recalculates
+cargo. Starting guns/crew stay read-only for originals and editable for additions.
+Adding ships expands the exported game to 4 MiB. All original ship entries
+remain present. Native construction time follows hull strength and industry.
 
 
 EXPORT FILES
@@ -96,6 +141,19 @@ EDITING LIMITS
   Maximum crew      10-500, in multiples of 10; cannot be reduced
                     below the factory crew allocation
   Base price        0.001-32 bars (10-320,000 gold), in 0.001-bar steps
+  Shipyard cargo    Nonnegative; total minus maximum gun/crew spaces
+  Factory cargo     Nonnegative; total minus factory gun/crew allocations
+  Total capacity    1-2,000; must cover maximum gun and crew spaces
+
+Additional limits for NEW ships:
+
+  Added classes     1-5; IDs 25-29, keeping all 25 original classes
+  Total capacity    1-2,000
+  Factory guns      Must fit the maximum gun limit and total capacity
+  Factory crew      Must fit the min/max crew limits and total capacity
+  Minimum industry  0-1,000, in multiples of 10
+  Ports             At least one compatible port; unreachable capital
+                    requirements are rejected
 
 Original stock values that fall outside some new-edit limits are left
 intact unless you modify those fields. The editor checks new values
@@ -104,12 +162,18 @@ before saving or exporting.
 
 LIMITATIONS AND TESTING
 -----------------------
-This is an initial beta focused on existing ship data. It does NOT:
+This beta adds up to five ship classes and edits existing ship data.
+It does NOT:
 
-  - Add new ship classes
-  - Edit total capacity or factory compartment allocations
-  - Change portraits, shipyard inventories, or industry requirements
-  - Modify the game engine, encounters, or other gameplay systems
+  - Import custom portraits or custom map/battle sprites
+  - Change factory guns or crew allocations of the original 25 ship classes
+  - Assign the new ships to enemy fleets
+  - Edit items, shops, stories, encounters, or battle controls
+  - Read patched games or convert saves from other expanded-ship mods
+
+Added classes reuse original artwork and descriptions. The exporter installs
+the engine hooks needed for the additional records, graphics and stock lists.
+Other gameplay rules remain stock; separate campaign patches are not included.
 
 Purchase prices still follow the game's original material, port,
 resale, and bargaining rules. Ships already owned in a saved game may
@@ -117,9 +181,26 @@ keep their existing condition and fitted layout. Data changes can also
 affect enemy ships that use the same ship-class tables.
 
 The exporter validates data and checks that its IPS patch reconstructs
-the output ROM, but complete gameplay compatibility has NOT been
-verified. Keep your original ROM and saves backed up, and test your
-changes in an emulator before committing to a long playthrough.
+the output ROM. Release checks passed for stock-ROM edits, projects,
+the packaged Windows application, added-ship records, new/used stock,
+capture, normal SRAM save/load, construction timers, map/battle icon
+selection, cold boot and all five actual shipyard portrait previews.
+
+These checks use controlled fixtures. Construction pickup, normal voyages
+and complete campaign compatibility have NOT been fully playtested.
+Keep your original ROM and saves backed up, and test your changes in an
+emulator before committing to a long playthrough.
+
+SAVE COMPATIBILITY
+------------------
+Restart the emulator after changing ROMs. Use a normal in-game save or
+start a new game; do not load an emulator save state from another ROM.
+
+Once you play a project, keep the added ships in the SAME ORDER. Removing
+a class renumbers later additions and can reinterpret their hull IDs in
+that mod's saves. Rename or edit an existing addition instead of removing
+and recreating it after playing. The editor does not convert saves made
+with other expanded-ship mods.
 
 
 PROJECT, LICENSE, AND DISCLAIMER
