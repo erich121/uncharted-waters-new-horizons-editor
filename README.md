@@ -6,6 +6,13 @@ A ship-data editor for the original USA SNES release of *Uncharted Waters: New H
 
 Edit the original game's 25 ship classes and add up to five new classes. Save your work as a project, then export a modified ROM for testing or an IPS patch for sharing.
 
+
+## Screenshot
+
+![New Horizons Editor v0.3.0](v0.3.0.screenshot.PNG)
+
+
+
 ## Getting started
 
 1. Extract the entire Windows release ZIP to a folder.
