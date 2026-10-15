@@ -8,7 +8,7 @@ class CargoTests(unittest.TestCase):
     def setUp(self):
         path=Path(os.environ.get('NH_STOCK_ROM',str(ROOT/'New Horizons (USA).zip')))
         if not path.is_file():self.skipTest('Set NH_STOCK_ROM to a compatible stock ROM.')
-        self.p=ShipProject(path)
+        self.p=ShipProject(path);self.p.repair_safeguard=False
     def test_every_original_cargo_capacity_and_byte_boundaries(self):
         for i,s in enumerate(self.p.original):
             cargo=s['factory_cargo']+17

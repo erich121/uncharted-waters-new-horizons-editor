@@ -1,6 +1,6 @@
 # New Horizons Ship Editor
 
-**Version 0.2.0 Beta · October 14, 2026 · Windows**
+**Version 0.3.0 Beta · October 15, 2026 · Windows**
 
 A ship-data editor for the original USA SNES release of *Uncharted Waters: New Horizons*.
 
@@ -21,19 +21,21 @@ To reopen a project, first open the original USA ROM, then click **Open project*
 
 The window supports vertical and horizontal scrolling when its contents do not fit. Use the scrollbars or mouse wheel; **Shift + mouse wheel** scrolls horizontally. Fields reached with **Tab** are brought into view automatically. The ship and port lists have their own scrollbars.
 
-The **layout4** Windows build groups settings into name/price, handling, gun/crew limits, capacity, and starting equipment. Availability has separate artwork, industry, and port sections. Cargo is calculated and read-only. The ship list and settings scroll independently; Add/Remove and Apply/Restore remain visible. The title shows `v0.2.0 [layout4]`.
+The editor groups settings into name/price, handling, gun/crew limits, capacity, and starting equipment. Availability contains industry and port settings; Graphics contains artwork settings. Cargo is calculated and read-only. The ship list and settings scroll independently; Add/Remove and Apply/Restore remain visible. Search filters the ship list as you type. Capacity and starting equipment stay visible below the main panels; scroll to reach them. Mates and Enemy Captains are reserved for future versions.
 
 ## Adding a new ship
 
 1. Select an original ship and click **Add ship (up to 5)** to copy its starting specifications into a new, independent class.
 2. On **Specifications**, set its name, stats, price, total capacity, factory guns, and factory crew spaces. Remaining capacity becomes cargo.
-3. On **Availability and graphics**, choose an original visual family. This changes the reused graphics and description, not the current stats.
+3. On **Graphics**, choose an original visual family. This changes the reused graphics and description, not the current stats.
 4. Select ports with **Ctrl-click** and set the minimum industry. Port rows show starting industry. Fixed capitals cannot be developed, so the editor rejects requirements above their starting industry.
 5. Apply changes, save the project, and export to a new filename.
 
+Selected ports are potential building locations: the ship appears only when the port meets the minimum industry requirement. Port rows show stock starting industry, not the current value in your save.
+
 The industry requirement is shared by all selected ports for a ship. New classes may appear occasionally in fresh used stock at eligible ports; cached offers need not update immediately. They are not automatically assigned to enemy fleets.
 
-Projects saved by v0.1.0 still load. New saves use project format version 2.
+Projects saved by earlier editor versions still load. New saves use project format version 6.
 
 ## What you can edit
 
@@ -48,6 +50,7 @@ Projects saved by v0.1.0 still load. New saves use project format version 2.
 - Maximum crew spaces
 - Base purchase price
 - Total capacity (cargo is calculated automatically)
+- New-build ports and minimum industry
 
 Prices are entered in **gold bars**: **1 bar = 10,000 gold**. For example, 2.5 bars = 25,000 gold.
 
@@ -62,7 +65,37 @@ Prices are entered in **gold bars**: **1 bar = 10,000 gold**. For example, 2.5 b
 
 **Total capacity is editable; both cargo displays are read-only.** Shipyard cargo is total capacity minus maximum guns and maximum crew spaces, matching the shipyard screen. Cargo when first built is total capacity minus starting guns and starting crew spaces. These can differ on stock ships such as Buss and Sloop. Changing capacity or allocations recalculates cargo automatically. Starting guns and crew allocations remain read-only for the original 25 ships and editable for added ships.
 
-Adding ships expands the exported game to **4 MiB** and preserves every original ship entry. Native construction time follows hull strength and port industry.
+Adding ships, changing original new-build availability, importing custom portraits, or enabling Repair Safeguard or Fleet Control expands the exported game to **4 MiB** and preserves every original ship entry. Native construction time follows hull strength and port industry.
+
+## Custom ship portraits
+
+On **Graphics**, click **Import PNG** for any original or added ship. The converter resizes to **64x48 pixels** with nearest-neighbor sampling and maps colors to the original game's **16-color ship palette**. Transparent pixels use the palette-zero background. A correctly sized PNG gives the most predictable result.
+
+Review the exact converted pixels, then click **Use portrait** or **Cancel**. The displayed preview is enlarged without smoothing. **Restore portrait** removes only the custom picture; **Restore selected ship** also restores its portrait along with the other ship settings.
+
+Converted tile data is embedded inside the project, so the source PNG is not needed when reopening it or moving it to another PC. Custom portraits expand the export to 4 MiB. Each image uses a reserved slot and the game's existing decompressor. Map and battle icons, descriptions, and ship specifications are controlled separately.
+
+## Original ship availability
+
+On **Availability**, select new-build ports and the minimum industry for any original ship. Used-ship locations and industry rules stay unchanged. Original map/battle graphics remain fixed; portraits can be imported separately.
+
+The starting selections come from the stock game. Existing locked capital offers are preserved; new offers that a fixed capital cannot unlock are rejected. Original ships can have no selected ports, removing them from new-build offers. Each port supports up to 16 new-build types, including added ships.
+
+**Restore selected ship** restores both stock specifications and availability. Projects save availability separately. Changing original availability expands the export to 4 MiB.
+
+## Repair Safeguard
+
+On **Fixes**, leave **Repair Safeguard** checked to prevent excessive gold or lumber charges when lowered ship stats conflict with an existing save. Original repair rates are preserved. Uncheck it to keep original repair behavior.
+
+The setting is saved with your project and recorded in the export report. Older projects load with the safeguard enabled. Enabled exports use 4 MiB even without added ships; exports without additions, original availability changes, or either option remain 2 MiB. The editor does not modify save files.
+
+## Fleet Control (Experimental)
+
+On **Gameplay**, enable **Fleet Control (Experimental)** to control your mates’ ships manually in battle. The camera follows each manual ship’s turn and returns to the flagship when its turn comes back.
+
+At the main battle command menu, press **Select** to toggle mate automation, release the button, then press **A** to dismiss the confirmation. Each new battle starts in manual mode. Your flagship remains manual, enemies retain their AI, and duel commands remain available.
+
+The option is off by default and saved with the editor project. Earlier projects load with it off. Enabled exports use 4 MiB. Runtime mode is transient; the save-file format stays unchanged. Native control/camera checks have been performed, but full scripted-battle and duel playthrough compatibility is still being tested.
 
 ## Export files
 
@@ -127,13 +160,13 @@ Original stock exceptions are preserved unless you modify the relevant fields. T
 
 This beta adds up to five ship classes and edits existing ship data. It does not:
 
-- Import custom portraits or custom map/battle sprites
+- Import custom map/battle sprites
 - Change factory guns or crew allocations of the original 25 classes
 - Assign new ships to enemy fleets
-- Edit items, shops, stories, encounters, or battle controls
+- Edit items, shops, stories, or encounters
 - Read patched games or convert saves from other expanded-ship mods
 
-Added classes reuse original artwork and descriptions. The exporter installs the engine hooks needed for additional records, graphics, and stock lists. Other gameplay rules remain stock; separate campaign patches are not included.
+Added classes reuse original map/battle artwork and descriptions; portraits can be replaced. The exporter installs the engine hooks needed for additional records, graphics, and stock lists. Other gameplay rules remain stock; separate campaign patches are not included.
 
 Purchase prices follow the game's original material, port, resale, and bargaining rules. Ships already owned in a save may keep their existing condition and fitted layout. Data edits can also affect enemy ships using the same ship-class tables.
 
@@ -156,5 +189,9 @@ Restart the emulator after changing ROMs. Use a normal in-game save or start a n
 - [Plain-text instructions](README.txt)
 
 Source code is licensed under the [MIT License](LICENSE).
+
+Ship portrait decompression is adapted from [Gilmok’s UWNHRando](https://github.com/Gilmok/UWNHRando), used under the MIT License. See [UWNHRando.LICENSE](UWNHRando.LICENSE).
+
+Image processing and portrait conversion use Pillow. See [Pillow.LICENSE](Pillow.LICENSE).
 
 This is an unofficial fan-created tool, unaffiliated with and not endorsed by KOEI or Koei Tecmo. No game ROM is included. Supply your own legally obtained compatible ROM.

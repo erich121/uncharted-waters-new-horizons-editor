@@ -9,7 +9,7 @@ class ShipEditorTests(unittest.TestCase):
     def setUp(self):
         source=Path(os.environ.get('NH_STOCK_ROM',str(ROOT/'New Horizons (USA).zip')))
         if not source.is_file():self.skipTest('Set NH_STOCK_ROM to your original USA ROM or ZIP.')
-        self.p=ShipProject(source)
+        self.p=ShipProject(source);self.p.repair_safeguard=False
     def test_stock_roundtrip_exact(self):
         self.assertEqual(len(self.p.ships),25)
         self.assertEqual(self.p.ships[10]['name'],'Galleon')
@@ -34,7 +34,7 @@ class ShipEditorTests(unittest.TestCase):
     def test_header_zip_projects_exports_and_no_overwrite(self):
         with tempfile.TemporaryDirectory()as folder:
             f=Path(folder);source=f/'Stock.smc';source.write_bytes(b'A'*512+self.p.rom)
-            p=ShipProject(source);p.update(3,dict(min_crew=30))
+            p=ShipProject(source);p.repair_safeguard=False;p.update(3,dict(min_crew=30))
             project=f/'My Mod.json';p.save_project(project)
             second=ShipProject(source);second.load_project(project);self.assertEqual(second.ships,p.ships)
             before=source.read_bytes();out=f/'New Mod.sfc';report=p.export(out)

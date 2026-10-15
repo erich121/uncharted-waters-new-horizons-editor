@@ -4,7 +4,7 @@ from decimal import Decimal,InvalidOperation
 from pathlib import Path
 
 ROM_SHA='64bc4707f422661a66618088887e2363a5f896ea683c58984fffd96dd21ab5f0'
-TOOL_VERSION='0.2.0'
+TOOL_VERSION='0.3.0'
 MODEL_BASE=0x8cbb6
 SPEC_BASE=0x8ce27
 FIELDS=('name','hull','turning','power','max_guns','min_crew','max_crew','price_gold')
@@ -143,16 +143,55 @@ class ShipProject:
     def __init__(self,path):
         self.source=Path(path).resolve();self.rom,self.header=read_stock(self.source)
         self.original=decode(self.rom);self.ships=[dict(s)for s in self.original]
-        self.project_path=None
+        self.project_path=None;self.repair_safeguard=True;self.fleet_control=False;self.portraits={}
+        catalog=ports(self.rom)
+        self.stock_availability=[dict(ports=[p['id']for p in catalog if i in self.rom[0x8fae7+p['group']*8:0x8faef+p['group']*8]],industry=s['industry'])for i,s in enumerate(self.original)]
+        self.original_availability=copy.deepcopy(self.stock_availability)
 
     def update(self,i,values):
         if type(i)is not int or not 0<=i<len(self.ships):raise ValueError('Invalid ship ID.')
         if i>=25:
             if set(values)-set(UPDATE_FIELDS+EXTRA_FIELDS):raise ValueError('Unknown added-ship fields.')
             row=fit_values(self.ships[i],values)
-            validate_extra(row,self.rom);self.ships[i]=row;return
-        if set(values)-set(UPDATE_FIELDS):raise ValueError('Unknown editable fields.')
-        row=fit_values(self.ships[i],values);validate(row,self.original[i]);self.ships[i]=row
+            validate_extra(row,self.rom)
+            offers=self.all_offers();offers[i]=dict(ports=row['ports'],industry=row['industry']);self.validate_offer_counts(offers)
+            self.ships[i]=row;return
+        if set(values)-set(UPDATE_FIELDS+('ports','industry')):raise ValueError('Unknown editable fields.')
+        values=copy.deepcopy(values);offer=copy.deepcopy(self.original_availability[i])
+        for k in ('ports','industry'):
+            if k in values:offer[k]=values.pop(k)
+        self.validate_availability(i,offer)
+        row=fit_values(self.ships[i],values);validate(row,self.original[i])
+        offers=self.all_offers();offers[i]=offer;self.validate_offer_counts(offers)
+        self.ships[i]=row;self.original_availability[i]=offer
+
+    def validate_availability(self,i,offer):
+        if not isinstance(offer,dict)or set(offer)!={'ports','industry'}:raise ValueError('Invalid original ship availability.')
+        industry=offer['industry'];ps=offer['ports']
+        if type(industry)is not int or not 0<=industry<=1000 or industry%10:raise ValueError('Industry must be 0–1000 in steps of 10.')
+        if not isinstance(ps,list)or any(type(p)is not int or not 0<=p<100 for p in ps)or len(set(ps))!=len(ps):raise ValueError('Choose valid ports without duplicates.')
+        catalog=ports(self.rom);stock=self.stock_availability[i]
+        for p in ps:
+            if catalog[p]['group']>=11:raise ValueError('Port has no supported shipyard.')
+            unchanged=p in stock['ports']and industry<=stock['industry']
+            if catalog[p]['capital']and industry>catalog[p]['industry']and not unchanged:raise ValueError(f"{catalog[p]['name']} cannot reach industry {industry}; its industry is fixed at {catalog[p]['industry']}.")
+        offer['ports']=sorted(ps)
+
+    def availability_changes(self):
+        result=[]
+        for i,o in enumerate(self.original_availability):
+            self.validate_availability(i,o)
+            if o!=self.stock_availability[i]:result.append(dict(id=i,**copy.deepcopy(o)))
+        return result
+
+    def all_offers(self):
+        return copy.deepcopy(self.original_availability)+[dict(ports=s['ports'],industry=s['industry'])for s in self.ships[25:]]
+
+    def validate_offer_counts(self,offers=None):
+        offers=self.all_offers()if offers is None else offers
+        for port in ports(self.rom):
+            # Native menu storage was already verified for sixteen visible offers.
+            if sum(port['id']in o['ports']for o in offers)>16:raise ValueError(f"{port['name']} exceeds the 16-ship new-build menu limit.")
 
     def changes(self):
         if not 25<=len(self.ships)<=30:raise ValueError('You may add up to five ships.')
@@ -170,15 +209,32 @@ class ShipProject:
         s['factory_crew']=max(s['factory_crew'],s['min_crew'])
         s['factory_cargo']=s['capacity']-s['factory_guns']-s['factory_crew']
         s['capacity']=s['factory_guns']+s['factory_crew']+s['factory_cargo']
-        validate_extra(s,self.rom);self.ships.append(s);return s['id']
+        validate_extra(s,self.rom);self.validate_offer_counts(self.all_offers()+[dict(ports=s['ports'],industry=s['industry'])]);self.ships.append(s);return s['id']
 
     def remove_ship(self,i):
         if type(i)is not int or not 25<=i<len(self.ships):raise ValueError('Only added ships can be removed.')
         self.ships.pop(i)
+        self.portraits={n-(n>i):raw for n,raw in self.portraits.items()if n!=i}
         for n,s in enumerate(self.ships):s['id']=n
 
+    def portrait_raw(self,i):
+        if type(i)is not int or not 0<=i<len(self.ships):raise ValueError('Invalid portrait ship ID.')
+        if i in self.portraits:return self.portraits[i]
+        from portraits import original_raw
+        return original_raw(self.rom,i if i<25 else self.ships[i]['base_hull'])
+
+    def set_portrait(self,i,raw):
+        if type(i)is not int or not 0<=i<len(self.ships):raise ValueError('Invalid portrait ship ID.')
+        from portraits import validate_raw
+        validate_raw(raw);self.portraits[i]=raw
+
+    def restore_portrait(self,i):
+        self.portraits.pop(i,None)
+
     def manifest(self):
-        return dict(format='new-horizons-ship-project',version=2,base_sha256=ROM_SHA,
+        from portraits import pack,unpack
+        embedded=pack(self.portraits);unpack(embedded,len(self.ships))
+        return dict(portraits=embedded,format='new-horizons-ship-project',version=6,base_sha256=ROM_SHA,original_availability=self.availability_changes(),fixes=dict(repair_safeguard=self.repair_safeguard,fleet_control=self.fleet_control),
             edits=[dict(id=c['id'],field=c['field'],value=c['after'])for c in self.changes()],added_ships=copy.deepcopy(self.ships[25:]))
 
     def save_project(self,path):
@@ -194,9 +250,13 @@ class ShipProject:
     def load_project(self,path):
         path=Path(path).resolve();m=json.loads(path.read_text(encoding='utf-8-sig'))
         if not isinstance(m,dict):raise ValueError('Unsupported project: expected a ship project object.')
-        keys={'format','version','base_sha256','edits'}|({'added_ships'}if m.get('version')==2 else set())
-        if set(m)!=keys or m['format']!='new-horizons-ship-project'or type(m['version'])is not int or m['version']not in (1,2)or m['base_sha256']!=ROM_SHA or not isinstance(m['edits'],list):
+        keys={'format','version','base_sha256','edits'}|({'added_ships'}if m.get('version')in (2,3,4,5,6)else set())|({'fixes'}if m.get('version')in (3,4,5,6)else set())|({'original_availability'}if m.get('version')in (4,5,6) else set())|({'portraits'}if m.get('version')==6 else set())
+        if set(m)!=keys or m['format']!='new-horizons-ship-project'or type(m['version'])is not int or m['version']not in (1,2,3,4,5,6)or m['base_sha256']!=ROM_SHA or not isinstance(m['edits'],list):
             raise ValueError('Unsupported project or ROM revision.')
+        fixes=m.get('fixes',dict(repair_safeguard=True))
+        expected={'repair_safeguard','fleet_control'}if m['version']>=5 else {'repair_safeguard'}
+        if not isinstance(fixes,dict)or set(fixes)!=expected or any(type(v)is not bool for v in fixes.values()):raise ValueError('Invalid optional fix settings.')
+        fleet_control=fixes.get('fleet_control',False)
         rows=[dict(s)for s in self.original];seen=set()
         for e in m['edits']:
             if not isinstance(e,dict)or set(e)!={'id','field','value'}or type(e['id'])is not int or not 0<=e['id']<25 or e['field']not in EDIT_FIELDS:
@@ -210,12 +270,24 @@ class ShipProject:
         for n,s in enumerate(added):
             validate_extra(s,self.rom)
             if s['id']!=25+n:raise ValueError('Added ship IDs must be consecutive.')
+        offers=copy.deepcopy(self.stock_availability);seen=set()
+        raw=m.get('original_availability',[])
+        if not isinstance(raw,list):raise ValueError('Invalid original availability list.')
+        for o in raw:
+            if not isinstance(o,dict)or set(o)!={'id','ports','industry'}or type(o['id'])is not int or not 0<=o['id']<25 or o['id']in seen:raise ValueError('Invalid original availability entry.')
+            seen.add(o['id']);offer=dict(ports=o['ports'],industry=o['industry']);self.validate_availability(o['id'],offer);offers[o['id']]=offer
         rows.extend(added)
-        self.ships=rows;self.project_path=path
+        for port in ports(self.rom):
+            if sum(port['id']in o['ports']for o in offers)+sum(port['id']in o['ports']for o in added)>16:raise ValueError('New-build menu exceeds sixteen ships.')
+        from portraits import unpack
+        portrait_data=unpack(m.get('portraits',[]),len(rows))
+        self.portraits=portrait_data
+        self.original_availability=offers
+        self.ships=rows;self.repair_safeguard=fixes['repair_safeguard'];self.fleet_control=fleet_control;self.project_path=path
 
     def build(self):
-        changes=self.changes()
-        if not changes and len(self.ships)==25:return self.rom,[]
+        changes=self.changes();offers=self.availability_changes();self.validate_offer_counts()
+        if not offers and not changes and len(self.ships)==25 and not self.repair_safeguard and not self.fleet_control and not self.portraits:return self.rom,[]
         if len(self.ships)>25:
             from expansion import make_fleet
             catalog=ports(self.rom)
@@ -237,6 +309,17 @@ class ShipProject:
                 at=SPEC_BASE+i*12+offsets[field]
                 if field=='price_gold':struct.pack_into('<H',data,at,value//10)
                 else:data[at]=value//10 if field=='max_crew'else value
+        if offers:
+            from availability import install
+            install(data,self.rom,self.all_offers())
+        if self.repair_safeguard:
+            from repair import apply
+            apply(data)
+        if self.fleet_control:
+            from fleet_control import apply_manual_fleet
+            result,_=apply_manual_fleet(bytes(data));data=bytearray(result)
+        from portraits import install
+        install(data,self.rom,self.portraits,len(self.ships))
         data[0xffdc:0xffe0]=b'\xff\xff\0\0';check=sum(data)&65535
         struct.pack_into('<HH',data,0xffdc,check^65535,check)
         assert len(data)in (0x200000,0x400000)and sum(data)&65535==check
@@ -249,8 +332,8 @@ class ShipProject:
         if self.source in targets or self.project_path in targets:raise ValueError('Output cannot replace the source game or project.')
         if any(p.exists()for p in targets):raise ValueError('An output file already exists. Choose a new filename to preserve previous versions.')
         rom,changes=self.build();patch=ips(self.rom,rom);assert apply_ips(self.rom,patch)==rom
-        report=dict(tool='New Horizons Ship Editor',tool_version=TOOL_VERSION,base_sha256=ROM_SHA,output_sha256=sha(rom),
-            input_header_removed=bool(self.header),output_headerless=True,changed_fields=changes,added_ships=self.ships[25:],
+        report=dict(custom_portraits=[dict(id=i,tiles_sha256=sha(raw))for i,raw in sorted(self.portraits.items())],tool='New Horizons Ship Editor',tool_version=TOOL_VERSION,base_sha256=ROM_SHA,output_sha256=sha(rom),
+            original_availability=copy.deepcopy(self.availability_changes()),fixes=dict(repair_safeguard=self.repair_safeguard,fleet_control=self.fleet_control),input_header_removed=bool(self.header),output_headerless=True,changed_fields=changes,added_ships=self.ships[25:],
             ips_base='Original unheadered USA New Horizons ROM',runtime_tested=False,
             note='Data validation and patch reconstruction passed. Edited gameplay balance still needs emulator testing.')
         path.parent.mkdir(parents=True,exist_ok=True)
