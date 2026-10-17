@@ -81,7 +81,7 @@ class PortraitTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.p.set_portrait(10,b'bad')
         with self.assertRaises(ValueError):self.p.set_portrait(True,self.raw)
     def test_legacy_schema_five(self):
-        m=self.p.manifest();m.pop('portraits');m['version']=5
+        m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m['version']=5;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None)
         with tempfile.TemporaryDirectory()as f:
             path=Path(f)/'legacy.json';path.write_text(json.dumps(m));self.p.set_portrait(10,self.raw);self.p.load_project(path)
             self.assertEqual(self.p.portraits,{})

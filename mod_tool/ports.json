@@ -1,0 +1,522 @@
+[
+  {
+    "id": 0,
+    "name": "Lisbon"
+  },
+  {
+    "id": 1,
+    "name": "Seville"
+  },
+  {
+    "id": 2,
+    "name": "Istanbul"
+  },
+  {
+    "id": 3,
+    "name": "Barcelona"
+  },
+  {
+    "id": 4,
+    "name": "Algiers"
+  },
+  {
+    "id": 5,
+    "name": "Tunis"
+  },
+  {
+    "id": 6,
+    "name": "Valencia"
+  },
+  {
+    "id": 7,
+    "name": "Marseille"
+  },
+  {
+    "id": 8,
+    "name": "Genoa"
+  },
+  {
+    "id": 9,
+    "name": "Pisa"
+  },
+  {
+    "id": 10,
+    "name": "Naples"
+  },
+  {
+    "id": 11,
+    "name": "Syracuse"
+  },
+  {
+    "id": 12,
+    "name": "Palma"
+  },
+  {
+    "id": 13,
+    "name": "Venice"
+  },
+  {
+    "id": 14,
+    "name": "Ragusa"
+  },
+  {
+    "id": 15,
+    "name": "Candia"
+  },
+  {
+    "id": 16,
+    "name": "Athens"
+  },
+  {
+    "id": 17,
+    "name": "Salonika"
+  },
+  {
+    "id": 18,
+    "name": "Alexandria"
+  },
+  {
+    "id": 19,
+    "name": "Jaffa"
+  },
+  {
+    "id": 20,
+    "name": "Beirut"
+  },
+  {
+    "id": 21,
+    "name": "Nicosia"
+  },
+  {
+    "id": 22,
+    "name": "Tripoli"
+  },
+  {
+    "id": 23,
+    "name": "Kaffa"
+  },
+  {
+    "id": 24,
+    "name": "Azov"
+  },
+  {
+    "id": 25,
+    "name": "Trebizond"
+  },
+  {
+    "id": 26,
+    "name": "Ceuta"
+  },
+  {
+    "id": 27,
+    "name": "Bordeaux"
+  },
+  {
+    "id": 28,
+    "name": "Nantes"
+  },
+  {
+    "id": 29,
+    "name": "London"
+  },
+  {
+    "id": 30,
+    "name": "Bristol"
+  },
+  {
+    "id": 31,
+    "name": "Dublin"
+  },
+  {
+    "id": 32,
+    "name": "Antwerp"
+  },
+  {
+    "id": 33,
+    "name": "Amsterdam"
+  },
+  {
+    "id": 34,
+    "name": "Copenhagen"
+  },
+  {
+    "id": 35,
+    "name": "Hamburg"
+  },
+  {
+    "id": 36,
+    "name": "Oslo"
+  },
+  {
+    "id": 37,
+    "name": "Stockholm"
+  },
+  {
+    "id": 38,
+    "name": "Lubeck"
+  },
+  {
+    "id": 39,
+    "name": "Danzig"
+  },
+  {
+    "id": 40,
+    "name": "Riga"
+  },
+  {
+    "id": 41,
+    "name": "Bergen"
+  },
+  {
+    "id": 42,
+    "name": "Caracas"
+  },
+  {
+    "id": 43,
+    "name": "Cartegena"
+  },
+  {
+    "id": 44,
+    "name": "Havana"
+  },
+  {
+    "id": 45,
+    "name": "Margarita"
+  },
+  {
+    "id": 46,
+    "name": "Panama"
+  },
+  {
+    "id": 47,
+    "name": "Porto Velho"
+  },
+  {
+    "id": 48,
+    "name": "Santo Domingo"
+  },
+  {
+    "id": 49,
+    "name": "Veracruz"
+  },
+  {
+    "id": 50,
+    "name": "Jamaica"
+  },
+  {
+    "id": 51,
+    "name": "Guatemala"
+  },
+  {
+    "id": 52,
+    "name": "Pernambuco"
+  },
+  {
+    "id": 53,
+    "name": "Rio de Janeiro"
+  },
+  {
+    "id": 54,
+    "name": "Maracaibo"
+  },
+  {
+    "id": 55,
+    "name": "Santiago"
+  },
+  {
+    "id": 56,
+    "name": "Cayenne"
+  },
+  {
+    "id": 57,
+    "name": "Madeira"
+  },
+  {
+    "id": 58,
+    "name": "Santa Cruz"
+  },
+  {
+    "id": 59,
+    "name": "San Jorge"
+  },
+  {
+    "id": 60,
+    "name": "Bissau"
+  },
+  {
+    "id": 61,
+    "name": "Luanda"
+  },
+  {
+    "id": 62,
+    "name": "Argin"
+  },
+  {
+    "id": 63,
+    "name": "Bathurst"
+  },
+  {
+    "id": 64,
+    "name": "Timbuktu"
+  },
+  {
+    "id": 65,
+    "name": "Abidjan"
+  },
+  {
+    "id": 66,
+    "name": "Sofala"
+  },
+  {
+    "id": 67,
+    "name": "Malindi"
+  },
+  {
+    "id": 68,
+    "name": "Mogadishu"
+  },
+  {
+    "id": 69,
+    "name": "Mombasa"
+  },
+  {
+    "id": 70,
+    "name": "Mozambique"
+  },
+  {
+    "id": 71,
+    "name": "Quelimane"
+  },
+  {
+    "id": 72,
+    "name": "Aden"
+  },
+  {
+    "id": 73,
+    "name": "Hormuz"
+  },
+  {
+    "id": 74,
+    "name": "Massawa"
+  },
+  {
+    "id": 75,
+    "name": "Cairo"
+  },
+  {
+    "id": 76,
+    "name": "Basra"
+  },
+  {
+    "id": 77,
+    "name": "Mecca"
+  },
+  {
+    "id": 78,
+    "name": "Quatar"
+  },
+  {
+    "id": 79,
+    "name": "Shiraz"
+  },
+  {
+    "id": 80,
+    "name": "Muscat"
+  },
+  {
+    "id": 81,
+    "name": "Diu"
+  },
+  {
+    "id": 82,
+    "name": "Cochin"
+  },
+  {
+    "id": 83,
+    "name": "Ceylon"
+  },
+  {
+    "id": 84,
+    "name": "Amboa"
+  },
+  {
+    "id": 85,
+    "name": "Goa"
+  },
+  {
+    "id": 86,
+    "name": "Malacca"
+  },
+  {
+    "id": 87,
+    "name": "Ternate"
+  },
+  {
+    "id": 88,
+    "name": "Banda"
+  },
+  {
+    "id": 89,
+    "name": "Dili"
+  },
+  {
+    "id": 90,
+    "name": "Pasei"
+  },
+  {
+    "id": 91,
+    "name": "Sunda"
+  },
+  {
+    "id": 92,
+    "name": "Calicut"
+  },
+  {
+    "id": 93,
+    "name": "Bankao"
+  },
+  {
+    "id": 94,
+    "name": "Zeiton"
+  },
+  {
+    "id": 95,
+    "name": "Macao"
+  },
+  {
+    "id": 96,
+    "name": "Hanoi"
+  },
+  {
+    "id": 97,
+    "name": "Changan"
+  },
+  {
+    "id": 98,
+    "name": "Sakai"
+  },
+  {
+    "id": 99,
+    "name": "Nagasaki"
+  },
+  {
+    "id": 100,
+    "name": "Hekla"
+  },
+  {
+    "id": 101,
+    "name": "Narvik"
+  },
+  {
+    "id": 102,
+    "name": "Cape Town"
+  },
+  {
+    "id": 103,
+    "name": "Belgrade"
+  },
+  {
+    "id": 104,
+    "name": "Tamatave"
+  },
+  {
+    "id": 105,
+    "name": "Dikson"
+  },
+  {
+    "id": 106,
+    "name": "Lushun"
+  },
+  {
+    "id": 107,
+    "name": "Leveque"
+  },
+  {
+    "id": 108,
+    "name": "Mindanao"
+  },
+  {
+    "id": 109,
+    "name": "Tiksi"
+  },
+  {
+    "id": 110,
+    "name": "Ezo"
+  },
+  {
+    "id": 111,
+    "name": "Geelong"
+  },
+  {
+    "id": 112,
+    "name": "Guam"
+  },
+  {
+    "id": 113,
+    "name": "Moresby"
+  },
+  {
+    "id": 114,
+    "name": "Korf"
+  },
+  {
+    "id": 115,
+    "name": "Wanganui"
+  },
+  {
+    "id": 116,
+    "name": "Suva"
+  },
+  {
+    "id": 117,
+    "name": "Nome"
+  },
+  {
+    "id": 118,
+    "name": "Naalehu"
+  },
+  {
+    "id": 119,
+    "name": "Tahiti"
+  },
+  {
+    "id": 120,
+    "name": "Juneau"
+  },
+  {
+    "id": 121,
+    "name": "Coppermine"
+  },
+  {
+    "id": 122,
+    "name": "Santa Barbara"
+  },
+  {
+    "id": 123,
+    "name": "Churchill"
+  },
+  {
+    "id": 124,
+    "name": "Callao"
+  },
+  {
+    "id": 125,
+    "name": "Valparaiso"
+  },
+  {
+    "id": 126,
+    "name": "Mollendo"
+  },
+  {
+    "id": 127,
+    "name": "Cape Cod"
+  },
+  {
+    "id": 128,
+    "name": "Montevideo"
+  },
+  {
+    "id": 129,
+    "name": "Forel"
+  }
+]

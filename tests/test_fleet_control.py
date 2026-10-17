@@ -38,7 +38,7 @@ class FleetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory()as f:
             path=Path(f)/'legacy.json'
             for version in (1,2,3,4):
-                m=self.p.manifest();m.pop('portraits');m['version']=version;m['fixes'].pop('fleet_control')
+                m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m['version']=version;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['fixes'].pop('fleet_control')
                 if version<4:m.pop('original_availability')
                 if version<3:m.pop('fixes')
                 if version<2:m.pop('added_ships')

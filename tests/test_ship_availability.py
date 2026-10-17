@@ -21,7 +21,7 @@ class AvailabilityTests(unittest.TestCase):
             for _ in range(count):p.add_ship(10)
             before,_=p.build();p.update(10,dict(ports=[31],industry=900));rom,_=p.build()
             self.assertEqual(decode(rom),p.original)
-            allowed=set(range(0xffdc,0xffe0))|set(range(0x219000,0x219000+352))|set(range(0x219200,0x219200+100*(25+count)))|set(range(0x219e00,0x219e00+2*(25+count)))|set(range(0x219f00,0x21a000))
+            allowed={0xffd7}|set(range(0xffdc,0xffe0))|set(range(0x219000,0x219000+352))|set(range(0x219200,0x219200+100*(25+count)))|set(range(0x219e00,0x219e00+2*(25+count)))|set(range(0x219f00,0x21a000))
             for a,size in [(0x82144,3),(0x82168,3),(0x82149,10),(0x821c0,4)]:allowed.update(range(a,a+size))
             self.assertTrue(all(a==b or i in allowed for i,(a,b)in enumerate(zip(before,rom))))
             for a,b in [(0x8fae7,0x8fb3f),(0x8251c,0x8257f),(0xa5826,0xa599e)]:self.assertEqual(rom[a:b],before[a:b])
@@ -52,7 +52,7 @@ class AvailabilityTests(unittest.TestCase):
     def test_old_schema_and_malformed_config(self):
         with tempfile.TemporaryDirectory()as f:
             path=Path(f)/'test.json'
-            m=self.p.manifest();m.pop('portraits');m.pop('original_availability');m['version']=3;m['fixes'].pop('fleet_control')
+            m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m.pop('original_availability');m['version']=3;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['fixes'].pop('fleet_control')
             path.write_text(json.dumps(m));self.p.load_project(path);self.assertEqual(self.p.availability_changes(),[])
             for raw in ('bad',[dict(id=10,ports=[31],industry=901)],[dict(id=10,ports=[31],industry=900)]*2):
                 m=self.p.manifest();m['original_availability']=raw;path.write_text(json.dumps(m));before=self.p.manifest()

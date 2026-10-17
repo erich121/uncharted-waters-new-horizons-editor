@@ -9,7 +9,7 @@ class RepairTests(unittest.TestCase):
         path=Path(os.environ.get('NH_STOCK_ROM',str(ROOT/'New Horizons (USA).zip')))
         if not path.is_file():self.skipTest('Supply a stock ROM.')
         self.p=ShipProject(path)
-    def test_default_enabled_and_exact_patch_for_zero_one_five(self):
+    def test_exact_patch_for_zero_one_five(self):
         for n in (0,1,5):
             p=ShipProject(self.p.source)
             for _ in range(n):p.add_ship(10)
@@ -26,6 +26,7 @@ class RepairTests(unittest.TestCase):
             self.assertEqual(len(fixed),0x400000)
             self.assertEqual(sum(fixed)&65535,int.from_bytes(fixed[0xffde:0xffe0],'little'))
     def test_disabled_stock_export_is_exact(self):
+        self.assertFalse(self.p.repair_safeguard)
         self.p.repair_safeguard=False;self.assertEqual(self.p.build(),(self.p.rom,[]))
     def test_option_project_export_roundtrip_and_manifest(self):
         with tempfile.TemporaryDirectory()as f:
