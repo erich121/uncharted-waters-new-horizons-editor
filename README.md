@@ -1,17 +1,17 @@
 # New Horizons Editor
 
-**Version 1.0.0 — Windows**
+**Version 1.0.1 — Windows**
 
 A fan-made ROM editor for the original USA SNES version of **Uncharted Waters: New Horizons**. Customize the game, try a preset adventure, or shuffle familiar content to make your next playthrough feel different.
 
 ## Screenshot
 
-![New Horizons Editor v0.3.0](screenshot.PNG)
+![New Horizons Editor v1.0.1](screenshot.PNG)
 
 
 ## Screenshot
 
-![New Horizons Editor v0.3.0](screenshot2.PNG)
+![New Horizons Editor v1.0.1](screenshot2.PNG)
 
 
 ## What can you change?

@@ -11,8 +11,9 @@ def open_shuffle(app):
  if not p:return
  app.commit();dialog=tk.Toplevel(app.root);dialog.title('Goods seed shuffle');dialog.geometry('700x590');dialog.minsize(400,380);dialog.transient(app.root);dialog.grab_set()
  frame=ttk.Frame(dialog,padding=16);frame.pack(fill='both',expand=True)
+ buttons=ttk.Frame(frame);buttons.pack(side='bottom',fill='x',pady=(8,0))
  ttk.Label(frame,text='Shuffle goods',font=('Segoe UI',14,'bold')).pack(anchor='w')
- hint=ttk.Label(frame,text='The same four-digit seed, option and blind mode reproduce the same arrangement. Normal and specialty goods shuffle within their own groups. Port offer counts and economy gates stay the same; base prices travel with their goods. Replaces current goods locations. Start a new game.',wraplength=640);hint.pack(anchor='w',pady=(6,12))
+ hint=ttk.Label(frame,text='Same seed, mode and blind setting repeat the shuffle. Counts and economy gates stay fixed; prices move with goods. Start a new game.',wraplength=640);hint.pack(anchor='w',pady=(6,12))
  seed=tk.StringVar(value=p.goods_shuffle['seed']or '0000');mode=tk.StringVar(value=next(k for k,v in MODES.items()if v==p.goods_shuffle['mode']))
  row=ttk.Frame(frame);row.pack(fill='x',pady=(0,8));ttk.Label(row,text='Seed (0000–9999)').pack(side='left',padx=(0,10));entry=ttk.Entry(row,textvariable=seed,width=8);entry.pack(side='left')
  choice=ttk.Combobox(frame,textvariable=mode,values=list(MODES),state='readonly',width=32);choice.pack(anchor='w',pady=(0,8))
@@ -32,15 +33,16 @@ def open_shuffle(app):
   except ValueError as error:messagebox.showerror('Could not shuffle goods',str(error),parent=dialog)
  def restore():
   p.goods_edits=[];p.goods_shuffle=dict(seed=None,mode='normal');app.reload_project_view();dialog.destroy()
- buttons=ttk.Frame(frame);buttons.pack(fill='x');widgets=[]
- for label,command in [('Random seed',lambda:seed.set(random_seed())),('Apply shuffle',apply),('Restore stock goods',restore),('Cancel',dialog.destroy)]:widgets.append(ttk.Button(buttons,text=label,command=command))
- def arrange(event):
+ widgets=[]
+ for label,command in [('Random shuffle',lambda:seed.set(random_seed())),('Apply shuffle',apply),('Restore goods',restore),('Cancel',dialog.destroy)]:widgets.append(ttk.Button(buttons,text=label,command=command))
+ def arrange(event=None):
+  available=event.width if event is not None else 368
   row=column=used=0
   for button in widgets:
    width=button.winfo_reqwidth()+6
-   if used and used+width>event.width:row+=1;column=used=0
+   if used and used+width>available:row+=1;column=used=0
    button.grid(row=row,column=column,sticky='w',padx=(0,6),pady=3);used+=width;column+=1
- buttons.bind('<Configure>',arrange);frame.bind('<Configure>',lambda event:hint.configure(wraplength=max(250,event.width-32)))
+ buttons.bind('<Configure>',arrange);arrange();frame.bind('<Configure>',lambda event:hint.configure(wraplength=max(250,event.width-32)))
  for variable in (seed,mode,blind):variable.trace_add('write',refresh)
  app.goods_shuffle_blind=blind
  app.goods_shuffle_dialog=dialog;app.goods_shuffle_seed=seed;app.goods_shuffle_mode=mode;app.goods_shuffle_preview=preview;app.goods_shuffle_candidates=candidates;app.goods_shuffle_buttons=widgets

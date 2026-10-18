@@ -10,6 +10,9 @@ def open_shuffle(app):
  if not p:return
  app.commit();dialog=tk.Toplevel(app.root);dialog.title('Item shop shuffle');dialog.geometry('680x560');dialog.minsize(400,380);dialog.transient(app.root);dialog.grab_set()
  frame=ttk.Frame(dialog,padding=16);frame.pack(fill='both',expand=True)
+ # Reserve the actions before allocating the expanding preview. Otherwise its
+ # requested height can push the entire footer outside a small dialog.
+ buttons=ttk.Frame(frame);buttons.pack(side='bottom',fill='x',pady=(8,0))
  ttk.Label(frame,text='Shuffle item locations',font=('Segoe UI',14,'bold')).pack(anchor='w')
  hint=ttk.Label(frame,text='Share the seed, option and blind mode to reproduce this shuffle. Special items are the early-morning offers (02:00–02:59). Stock counts and offer types stay the same. Start a new game.',wraplength=620);hint.pack(anchor='w',pady=(6,12))
  seed=tk.StringVar(value=p.item_seed or '0000');mode=tk.StringVar(value=MODES[2 if p.item_special_only else int(p.item_special)]);blind=tk.BooleanVar(value=p.item_blind)
@@ -32,16 +35,17 @@ def open_shuffle(app):
   except ValueError as error:messagebox.showerror('Could not shuffle items',str(error),parent=dialog)
  def restore():
   p.item_edits=[];p.item_seed=None;p.item_blind=False;p.item_special=False;p.item_special_only=False;app.reload_project_view();dialog.destroy()
- buttons=ttk.Frame(frame);buttons.pack(fill='x');widgets=[]
- for label,command in [('Random seed',lambda:seed.set(random_seed())),('Apply shuffle',apply),('Restore stock items',restore),('Cancel',dialog.destroy)]:
+ widgets=[]
+ for label,command in [('Random shuffle',lambda:seed.set(random_seed())),('Apply shuffle',apply),('Restore items',restore),('Cancel',dialog.destroy)]:
   button=ttk.Button(buttons,text=label,command=command);widgets.append(button)
- def arrange(event):
+ def arrange(event=None):
+  available=event.width if event is not None else 368
   row=column=used=0
   for button in widgets:
    width=button.winfo_reqwidth()+6
-   if used and used+width>event.width:row+=1;column=used=0
+   if used and used+width>available:row+=1;column=used=0
    button.grid(row=row,column=column,sticky='w',padx=(0,6),pady=3);used+=width;column+=1
- buttons.bind('<Configure>',arrange);frame.bind('<Configure>',lambda event:hint.configure(wraplength=max(250,event.width-32)))
+ buttons.bind('<Configure>',arrange);arrange();frame.bind('<Configure>',lambda event:hint.configure(wraplength=max(250,event.width-32)))
  for variable in (seed,mode,blind):variable.trace_add('write',refresh)
  app.item_shuffle_dialog=dialog;app.item_shuffle_seed=seed;app.item_shuffle_mode=mode;app.item_shuffle_blind=blind;app.item_shuffle_preview=preview;app.item_shuffle_candidates=candidates;app.item_shuffle_buttons=widgets
  refresh()

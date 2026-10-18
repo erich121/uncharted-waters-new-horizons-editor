@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — October 18, 2026
+
+- Keep item and goods shuffle buttons visible in smaller windows.
+
 ## 1.0.0 — October 16, 2026
 
 - Add seeded and blind ship-building randomization for the original 25 ships, with a standalone preset and combined preset support.

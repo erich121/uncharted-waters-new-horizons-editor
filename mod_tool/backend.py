@@ -4,7 +4,7 @@ from decimal import Decimal,InvalidOperation
 from pathlib import Path
 
 ROM_SHA='64bc4707f422661a66618088887e2363a5f896ea683c58984fffd96dd21ab5f0'
-TOOL_VERSION='1.0.0'
+TOOL_VERSION='1.0.1'
 MODEL_BASE=0x8cbb6
 SPEC_BASE=0x8ce27
 FIELDS=('name','hull','turning','power','max_guns','min_crew','max_crew','price_gold')

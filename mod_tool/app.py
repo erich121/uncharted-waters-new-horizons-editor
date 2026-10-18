@@ -1293,6 +1293,12 @@ class Editor:
 def main():
     try:ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:pass
+    if len(sys.argv)==5 and sys.argv[1]=='--item-shuffle-test'and sys.argv[3]=='--report':
+        from item_shuffle_checks import run
+        run(Editor,sys.argv[2],Path(sys.argv[4]));return
+    if len(sys.argv)==5 and sys.argv[1]=='--goods-shuffle-test'and sys.argv[3]=='--report':
+        from goods_shuffle_checks import run
+        run(Editor,sys.argv[2],Path(sys.argv[4]));return
     if len(sys.argv)==5 and sys.argv[1]=='--shipbuilding-test'and sys.argv[3]=='--report':
         from shipbuilding_checks import run
         run(Editor,sys.argv[2],Path(sys.argv[4]));return
