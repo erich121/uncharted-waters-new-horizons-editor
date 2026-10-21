@@ -1,7 +1,7 @@
 """Trade-location shuffle, using the existing per-port goods patch."""
 import tkinter as tk
 from tkinter import ttk,messagebox
-from trade_goods import seeded_shuffle,offers
+from trade_goods import shuffle_plan,offers
 from goods import catalogue
 from character_mods import random_seed
 MODES={'Shuffle normal goods':'normal','Shuffle specialty goods':'specialty','Shuffle all goods':'all'}
@@ -13,7 +13,7 @@ def open_shuffle(app):
  frame=ttk.Frame(dialog,padding=16);frame.pack(fill='both',expand=True)
  buttons=ttk.Frame(frame);buttons.pack(side='bottom',fill='x',pady=(8,0))
  ttk.Label(frame,text='Shuffle goods',font=('Segoe UI',14,'bold')).pack(anchor='w')
- hint=ttk.Label(frame,text='Same seed, mode and blind setting repeat the shuffle. Counts and economy gates stay fixed; prices move with goods. Start a new game.',wraplength=640);hint.pack(anchor='w',pady=(6,12))
+ hint=ttk.Label(frame,text='Counts and economy requirements stay as set. Only the selected goods change; prices move with them. The saved starting arrangement keeps repeat shuffles consistent. Start a new game.',wraplength=640);hint.pack(anchor='w',pady=(6,12))
  seed=tk.StringVar(value=p.goods_shuffle['seed']or '0000');mode=tk.StringVar(value=next(k for k,v in MODES.items()if v==p.goods_shuffle['mode']))
  row=ttk.Frame(frame);row.pack(fill='x',pady=(0,8));ttk.Label(row,text='Seed (0000–9999)').pack(side='left',padx=(0,10));entry=ttk.Entry(row,textvariable=seed,width=8);entry.pack(side='left')
  choice=ttk.Combobox(frame,textvariable=mode,values=list(MODES),state='readonly',width=32);choice.pack(anchor='w',pady=(0,8))
@@ -22,9 +22,13 @@ def open_shuffle(app):
  names={r['id']:r['name']for r in catalogue(p.rom)};candidates={}
  def refresh(*args):
   candidates.clear();preview.delete(0,'end')
-  try:edits=seeded_shuffle(p.rom,seed.get(),MODES[mode.get()],blind.get());candidates['edits']=edits
+  try:
+   candidate=shuffle_plan(p,seed.get(),MODES[mode.get()],blind.get());edits=candidate['goods_edits'];candidates.update(candidate);candidates['edits']=edits
   except (ValueError,KeyError):preview.insert('end','Enter four digits to preview goods locations.');return
-  if blind.get():preview.insert('end','Blind shuffle: destinations are hidden.');return
+  if candidate['goods_shuffle'].get('blind',False):
+   preview.insert('end','Blind shuffle: destinations are hidden.')
+   if candidate['goods_shuffle'].get('retained_blind'):preview.insert('end','Other goods retain blind results. Shuffle all goods or Restore goods to clear them.')
+   return
   from ports import PORT_NAMES
   for port,row in enumerate(offers(p.rom,edits)):
    for offer in row:preview.insert('end',PORT_NAMES[port]+' — '+names[offer['good']]+(' (specialty)'if offer['kind']=='Specialty'else '')+' — economy '+str(offer['economy_required']))

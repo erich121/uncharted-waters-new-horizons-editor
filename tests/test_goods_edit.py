@@ -1,4 +1,5 @@
 import sys,unittest,copy,tempfile,json
+from legacy_manifest import legacy_manifest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'mod_tool'))
 from backend import ShipProject,apply_ips
@@ -35,10 +36,10 @@ class GoodsEdits(unittest.TestCase):
   self.p.goods_edits=change(self.p.rom,[],4,10,500)
   with tempfile.TemporaryDirectory()as d:
    path=Path(d)/'project.json';self.p.save_project(path);other=ShipProject(self.p.source);other.load_project(path);self.assertEqual(other.goods_edits,self.p.goods_edits)
-   m=self.p.manifest();m['goods_edits'][0]['offers'][0]['price']=0;path.write_text(json.dumps(m));before=other.manifest()
+   m=self.p.manifest();m['goods_edits'][0]['offers'][0]['price']=0;path.write_text(json.dumps(legacy_manifest(m)));before=other.manifest()
    with self.assertRaises(ValueError):other.load_project(path)
    self.assertEqual(other.manifest(),before)
-   m=self.p.manifest();m.pop('goods_edits');m['version']=11;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);path.write_text(json.dumps(m));other.load_project(path);self.assertEqual(other.goods_edits,[])
+   m=self.p.manifest();m.pop('goods_edits');m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=11;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);path.write_text(json.dumps(legacy_manifest(m)));other.load_project(path);self.assertEqual(other.goods_edits,[])
  def test_all_editor_features_compose(self):
   for base in (0,3,10,13,16):self.p.add_ship(base)
   self.p.goods_edits=change(self.p.rom,[],4,10,500);self.p.fleet_control=True;self.p.fleet_difficulty=True;self.p.repair_safeguard=True

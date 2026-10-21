@@ -1,4 +1,5 @@
 """Optional fleet patch isolation, memory reservation and project migration."""
+from legacy_manifest import legacy_manifest
 import unittest,os,sys,tempfile,json
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT if (ROOT/'backend.py').exists()else ROOT/'mod_tool'))
@@ -38,13 +39,13 @@ class FleetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory()as f:
             path=Path(f)/'legacy.json'
             for version in (1,2,3,4):
-                m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m['version']=version;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['fixes'].pop('fleet_control')
+                m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=version;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['fixes'].pop('fleet_control')
                 if version<4:m.pop('original_availability')
                 if version<3:m.pop('fixes')
                 if version<2:m.pop('added_ships')
-                path.write_text(json.dumps(m));self.p.fleet_control=True;self.p.load_project(path);self.assertFalse(self.p.fleet_control)
+                path.write_text(json.dumps(legacy_manifest(m)));self.p.fleet_control=True;self.p.load_project(path);self.assertFalse(self.p.fleet_control)
             for value in ('yes',1,None):
-                m=self.p.manifest();m['fixes']['fleet_control']=value;path.write_text(json.dumps(m));before=self.p.manifest()
+                m=self.p.manifest();m['fixes']['fleet_control']=value;path.write_text(json.dumps(legacy_manifest(m)));before=self.p.manifest()
                 with self.assertRaises(ValueError):self.p.load_project(path)
                 self.assertEqual(self.p.manifest(),before)
 if __name__=='__main__':unittest.main()

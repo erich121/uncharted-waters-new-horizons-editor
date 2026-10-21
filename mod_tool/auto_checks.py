@@ -18,14 +18,14 @@ def run(Editor,rom_path,report_path):
             assert all('Changed.'not in button.cget('style')for button in app.section_buttons.values())
             original=app.project.ships[0]['hull'];edit(app.entries['hull'],original+1)
             assert app.project.ships[0]['hull']==original+1 and '*'in app.list.get(0)
-            assert app.entries['hull'].cget('style')=='Changed.TSpinbox'
+            assert app.entries['hull'].cget('style')=='Changed.Ship.TSpinbox'
             from app import CHANGE_ORANGE
             assert app.list.itemcget(0,'foreground')==CHANGE_ORANGE
             assert app.list.itemcget(0,'selectforeground')==CHANGE_ORANGE
             assert 'Changed.'in app.section_buttons['ships'].cget('style')
             app.restore_button.invoke();settle()
             assert app.project.ships[0]['hull']==original and '*'not in app.list.get(0)
-            assert app.entries['hull'].cget('style')=='TSpinbox'
+            assert app.entries['hull'].cget('style')=='Ship.TSpinbox'
             assert app.list.itemcget(0,'foreground')=='#17243d'
             edit(app.entries['hull'],original+1)
             edit(app.entries['hull'],'')
@@ -88,7 +88,7 @@ def run(Editor,rom_path,report_path):
             with patch('tkinter.Menu')as menu_factory:
                 app.section_menu(SimpleNamespace(x_root=12,y_root=34),'ships')
                 menu=menu_factory.return_value
-                assert menu.add_command.call_args.kwargs['label']=='Reset section'
+                assert menu.add_command.call_args.kwargs['label']=='Restore to defaults'
                 assert menu.add_command.call_args.kwargs['state']=='normal'
                 menu.tk_popup.assert_called_once_with(12,34)
                 app.section_menu(SimpleNamespace(x_root=12,y_root=34),'world')

@@ -1,4 +1,5 @@
 import sys,unittest,tempfile,json
+from legacy_manifest import legacy_manifest
 from pathlib import Path
 from collections import Counter
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'mod_tool'))
@@ -83,7 +84,7 @@ class SeedShuffles(unittest.TestCase):
   self.p.set_goods_shuffle('2026','all');self.p.set_free_agent_shuffle(True,'2026',True,True,True,True,True)
   with tempfile.TemporaryDirectory()as d:
    f=Path(d);self.p.save_project(f/'p.json');q=ShipProject(self.p.source);q.load_project(f/'p.json');self.assertEqual(q.manifest(),self.p.manifest());q.export(f/'p.sfc');self.assertEqual(apply_ips(q.rom,(f/'p.ips').read_bytes()),(f/'p.sfc').read_bytes())
-   m=ShipProject(self.p.source).manifest();m['version']=17;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle');(f/'old.json').write_text(json.dumps(m));q.load_project(f/'old.json');self.assertEqual(q.goods_shuffle,dict(seed=None,mode='normal'));self.assertEqual(q.build()[0],q.rom)
+   m=ShipProject(self.p.source).manifest();m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=17;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle');(f/'old.json').write_text(json.dumps(legacy_manifest(m)));q.load_project(f/'old.json');self.assertEqual(q.goods_shuffle,dict(seed=None,mode='normal'));self.assertEqual(q.build()[0],q.rom)
  def test_name_parts_repeat_and_legacy_pairs_are_preserved(self):
   stock=decode_sailors(self.p.rom)
   self.p.set_free_agent_shuffle(True,'1234',names=True,captain_names=True,ports=False)

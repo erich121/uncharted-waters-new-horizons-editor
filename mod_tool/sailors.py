@@ -8,6 +8,7 @@ BASE=0x881F3
 STRIDE=50
 COUNT=120
 NATIONALITIES=('Portugal','Spain','Turkey','England','Italy','Holland','Pirate')
+PROTAGONIST_IDS=tuple(range(6))
 MATE_IDS=tuple(range(69,114))+tuple(range(115,120))
 CAPTAIN_IDS=tuple(range(6,69))+(114,)
 ATTRIBUTES=('leadership','seamanship','knowledge','intuition','courage',
@@ -17,6 +18,8 @@ ATTRIBUTES=('leadership','seamanship','knowledge','intuition','courage',
 SKILLS=(('celestial_navigation','Celestial Navigation',16),('cartography','Cartography',8),
         ('gunnery','Gunnery',4),('accounting','Accounting',2),('negotiation','Negotiation',1))
 EDITABLE_FIELDS=ATTRIBUTES+('skills',)
+LEVEL_FIELDS=('navigation_level','battle_level')
+CHARACTER_FIELD_OFFSETS={**{key:28+i for i,key in enumerate(ATTRIBUTES)},'skills':48,'navigation_level':36,'battle_level':37}
 
 def skill_names(mask):return [label for _,label,bit in SKILLS if mask&bit]
 

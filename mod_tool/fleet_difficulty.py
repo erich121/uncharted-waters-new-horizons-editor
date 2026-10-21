@@ -39,9 +39,6 @@ def validate_rules(rules,ships,positions=4):
 
 def resolve(ships,source,target):
     if target<0 or source==target:return None,'No change'
-    old,new=ships[source],ships[target]
-    if any(new[k]<old[k]for k in ('hull','factory_guns','factory_crew')):
-        return None,'Not used: weaker hull, fewer guns or fewer crew'
     return target+40,'Uses this ship’s normal guns and crew'
 
 def compile_table(ships,rules):

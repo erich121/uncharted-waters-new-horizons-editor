@@ -18,7 +18,7 @@ def run(Editor,rom,report):
   app.custom_ships_box.invoke();settle();old=p.ships[0]['hull']
   app.entries['hull'].delete(0,'end');app.entries['hull'].insert(0,str(old+1));settle()
   app.custom_ships_box.invoke();settle()
-  assert app.entries['hull'].instate(['disabled'])and app.entries['hull'].cget('style')=='Changed.TSpinbox'
+  assert app.entries['hull'].instate(['disabled'])and str(app.entries['hull'].cget('style')).startswith('Changed.')
   assert p.ships[0]['hull']==old+1 and p.build()[0]!=p.rom
   app.restore();app.add();app.remove();assert len(p.ships)==25 and p.ships[0]['hull']==old+1
   for section in ('mates','captains'):
@@ -51,8 +51,7 @@ def run(Editor,rom,report):
   before=p.manifest()
   with tempfile.TemporaryDirectory()as d:
    path=Path(d)/'project.json';p.save_project(path);q=ShipProject(rom);q.load_project(path);assert q.manifest()==before and q.build()[0]==locked_rom
-   legacy=dict(before);legacy['version']=13;legacy.pop('item_special_only');legacy.pop('item_blind');legacy.pop('item_special');legacy.pop('item_seed');legacy.pop('item_edits');legacy.pop('custom_items')
-   for key in ('custom_ships','custom_goods','custom_economy','custom_mates','custom_captains'):legacy.pop(key)
+   legacy={key:before[key]for key in ('format','base_sha256','edits','added_ships','fixes','original_availability','portraits','character_edits','free_agent_shuffle','gameplay','goods_edits','economy_edits')};legacy['version']=13
    path.write_text(json.dumps(legacy));q.load_project(path);assert all((q.custom_goods,q.custom_economy,q.custom_mates,q.custom_captains))
    for key in ('custom_ships','custom_goods','custom_economy','custom_mates','custom_captains'):
     setattr(p,key,True);built,_=p.build();assert built==locked_rom;setattr(p,key,False)

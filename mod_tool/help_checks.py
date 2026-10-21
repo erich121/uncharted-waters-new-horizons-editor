@@ -29,7 +29,12 @@ def run(Editor,report):
     else:assert not app.help_repository_button.winfo_ismapped()
   dialog.destroy();root.update();app.help();root.update();assert app.help_dialog.winfo_exists()and app.help_dialog!=dialog
   app.help_dialog.destroy()
-  report.write_text(json.dumps(dict(status='PASS',sections=titles,available_without_rom=True,single_window_reopens=True,read_only_scrollable_content=True,about_text_and_repository=True,window_sizes=['640x480','960x660']),indent=2),encoding='utf-8')
+  # Opening a separate window used to trigger an endless Library geometry loop.
+  for kind in ('Ships','Discoveries','Items'):
+   app.switch_section('library');app.library.kind.set(kind);app.library.change_kind();root.update()
+   app.help();root.update();assert app.help_dialog.winfo_exists()
+   app.help_dialog.destroy();root.update()
+  report.write_text(json.dumps(dict(status='PASS',sections=titles,available_without_rom=True,single_window_reopens=True,read_only_scrollable_content=True,about_text_and_repository=True,library_help_responsive=True,window_sizes=['640x480','960x660']),indent=2),encoding='utf-8')
  except Exception as error:
   import traceback
   report.write_text(json.dumps(dict(status='FAIL',error=str(error),traceback=traceback.format_exc()),indent=2),encoding='utf-8');raise

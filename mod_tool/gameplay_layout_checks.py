@@ -22,12 +22,12 @@ def run(Editor,rom,report):
    assert root.winfo_containing(widget.winfo_rootx()+x,widget.winfo_rooty()+y)==widget,('covered',widget)
    widget.event_generate('<ButtonPress-1>',x=x,y=y);widget.event_generate('<ButtonRelease-1>',x=x,y=y);settle()
   with patch('tkinter.messagebox.showerror',side_effect=lambda *a,**k:errors.append(a)):
-   assert [app.gameplay_notebook.tab(t,'text')for t in app.gameplay_notebook.tabs()]==['Easy Settings','Battles','World']
-   assert list(app.world_gameplay_sections)==['Fleets','Mates','Items','Trade','Ships']
+   assert [app.gameplay_notebook.tab(t,'text')for t in app.gameplay_notebook.tabs()]==['Presets','Battles','World','Campaign']
+   assert list(app.world_gameplay_sections)==['Fleets','Mates','Items','Trade','Ships','Discoveries']
    assert not hasattr(app,'world_gameplay_notebook')
    for size in ('640x480','1440x900','1672x940'):
     root.geometry(size+'+0+0');app.switch_section('gameplay');app.gameplay_notebook.select(0);settle()
-    assert app.easy_apply.winfo_ismapped()and app.scroll==app.gameplay_scrollers[0]
+    assert app.custom_preset_choice.winfo_ismapped()and app.scroll==app.gameplay_scrollers[0]
     app.gameplay_notebook.select(1);settle();assert app.fleet_check.winfo_ismapped()and app.scroll==app.gameplay_scrollers[1]
     app.gameplay_notebook.select(2);settle();assert app.difficulty_check.winfo_ismapped()and app.scroll==app.gameplay_scrollers[2]
     assert app.difficulty_settings_button.instate(['disabled']);click(app.difficulty_check);assert p.fleet_difficulty and not app.difficulty_settings_button.instate(['disabled'])
@@ -47,12 +47,12 @@ def run(Editor,rom,report):
     assert 'read-only'not in app.world.intro.cget('text').lower()and 'read only'not in app.world.intro.cget('text').lower()
     app.world.mode.set('Port Information');app.world.change_mode();settle();assert 'read-only'in app.world.intro.cget('text').lower()
    assert p.manifest()==before and not errors,errors
-   # Presets mark the data they change, including when manual editing is locked.
+   # World shuffles mark the data they change, even with manual editing locked.
    from sailors import decode_sailors
    from character_mods import port_shuffle
    from app import CHANGE_ORANGE
    app.switch_section('gameplay');app.gameplay_notebook.select(0);settle()
-   app.easy_preset.set('Random Mates');app.easy_seed.set('2026');app.apply_easy_preset();settle();app.easy_preview_apply.invoke();settle()
+   p.set_free_agent_shuffle(True,'2026',False);app.reload_project_view();settle()
    assert not p.custom_mates
    assert 'Changed.'in app.section_buttons['mates'].cget('style')
    assert 'Changed.'not in app.section_buttons['gameplay'].cget('style')
@@ -72,7 +72,7 @@ def run(Editor,rom,report):
    assert all('*'not in app.list.get(i)for i in range(app.list.size()))
    p.fleet_control=True;app.update_status();assert 'Changed.'in app.section_buttons['gameplay'].cget('style')
    p.fleet_control=False;app.update_status();assert p.manifest()==before
-  report.write_text(json.dumps(dict(status='PASS',gameplay_tabs=['Easy Settings','Battles','World'],world_inline_categories=['Fleets','Mates','Items','Trade','Ships'],dialogs_open_and_cancel=True,one_shared_world_scrollbar=True,responsive_world_cards=True,full_size_world_fits_one_screen=True,items_copy_editable=True,port_information_read_only=True,settings_preserved=True,mate_shuffle_marks_mates_not_gameplay=True,normal_and_blind_row_and_location_colors=True,reset_clears_markers=True,window_sizes=['640x480','1440x900','1672x940']),indent=2),encoding='utf-8')
+  report.write_text(json.dumps(dict(status='PASS',gameplay_tabs=['Presets','Battles','World'],world_inline_categories=['Fleets','Mates','Items','Trade','Ships'],dialogs_open_and_cancel=True,one_shared_world_scrollbar=True,responsive_world_cards=True,full_size_world_fits_one_screen=True,items_copy_editable=True,port_information_read_only=True,settings_preserved=True,mate_shuffle_marks_mates_not_gameplay=True,normal_and_blind_row_and_location_colors=True,reset_clears_markers=True,window_sizes=['640x480','1440x900','1672x940']),indent=2),encoding='utf-8')
  except Exception as error:
   import traceback
   report.write_text(json.dumps(dict(status='FAIL',error=str(error),traceback=traceback.format_exc()),indent=2),encoding='utf-8');raise

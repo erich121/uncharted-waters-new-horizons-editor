@@ -40,7 +40,7 @@ def open_settings(editor,Scroller):
                 result,reason=resolve(ships,source,target);s=ships[target]
                 note=(' — '+reason)if result is None else ''
                 lines.append(f'{ROLES[role]}: {ships[source]["name"]} → {s["name"]} ({s["factory_guns"]} guns, {s["factory_crew"]} crew, hull strength {s["hull"]}){note}')
-        preview.configure(text=native+'\n\nYour choices\n'+('\n'.join(lines)if lines else 'No ship changes for this nation.')+'\n\nA ship with a weaker hull, fewer guns or fewer crew will not be used. Speed and turning can differ. Ships 5 onward, smaller fleets, pirates and your fleet keep the game’s choices.')
+        preview.configure(text=native+'\n\nYour choices\n'+('\n'.join(lines)if lines else 'No ship changes for this nation.')+'\n\nYour selected ships are used even if they are weaker than the originals. Ships 5 onward, smaller fleets, pirates and your fleet keep the game’s choices.')
     def change(*args):
         if loading:return
         for role in range(len(ROLES)):

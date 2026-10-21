@@ -1,4 +1,5 @@
 """Stock-only difficulty option, compatibility and isolated patch scope."""
+from legacy_manifest import legacy_manifest
 import unittest,sys,tempfile,json,os
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
@@ -32,11 +33,23 @@ class DifficultyTests(unittest.TestCase):
                 self.assertEqual(after[0x8c7ce:0x8ce27],p.rom[0x8c7ce:0x8ce27])
                 self.assertEqual(sum(after)&65535,int.from_bytes(after[0xffde:0xffe0],'little'))
 
-    def test_no_durability_downgrades_with_edited_hulls(self):
+    def test_explicit_replacements_allow_weaker_hulls(self):
         self.p.update(10,dict(hull=100));self.p.update(20,dict(hull=60))
-        self.assertEqual(upgrades(self.p.ships),[])
+        self.assertEqual(upgrades(self.p.ships),[(50,55),(51,60)])
         self.p.fleet_difficulty=True
         self.assertEqual(decode(self.p.build()[0]),self.p.ships)
+
+    def test_weaker_original_and_added_choices_are_encoded(self):
+        self.p.add_ship(0)
+        self.p.fleet_rules=preset('stock')
+        self.p.fleet_rules[0][0][1]=0
+        self.p.fleet_rules[3][2][1]=25
+        table=compile_table(self.p.ships,self.p.fleet_rules)
+        self.assertEqual(table[1],40)
+        self.assertEqual(table[3*16+2*4+1],65)
+        self.assertEqual(sum(v!=255 for v in table),2)
+        self.p.fleet_difficulty=True
+        self.p.build()
 
     def test_project_ips_and_legacy_migration(self):
         with tempfile.TemporaryDirectory()as f:
@@ -45,11 +58,11 @@ class DifficultyTests(unittest.TestCase):
             out=f/'Hard.sfc';report=p.export(out)
             self.assertTrue(report['gameplay']['fleet_difficulty'])
             self.assertEqual(apply_ips(p.rom,out.with_suffix('.ips').read_bytes()),out.read_bytes())
-            m=self.p.manifest();m['version']=7;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m.pop('gameplay');path.write_text(json.dumps(m));p.load_project(path)
+            m=self.p.manifest();m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=7;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m.pop('gameplay');path.write_text(json.dumps(legacy_manifest(m)));p.load_project(path)
             self.assertFalse(p.fleet_difficulty)
             self.assertEqual(p.build(),(p.rom,[]))
             for value in (1,'yes',None):
-                m=self.p.manifest();m['gameplay']['fleet_difficulty']=value;path.write_text(json.dumps(m));before=p.manifest()
+                m=self.p.manifest();m['gameplay']['fleet_difficulty']=value;path.write_text(json.dumps(legacy_manifest(m)));before=p.manifest()
                 with self.assertRaises(ValueError):p.load_project(path)
                 self.assertEqual(p.manifest(),before)
 
@@ -74,11 +87,11 @@ class DifficultyTests(unittest.TestCase):
     def test_invalid_rules_atomic_and_schema8_keeps_preset(self):
         with tempfile.TemporaryDirectory()as f:
             path=Path(f)/'Project.json'
-            m=self.p.manifest();m['version']=8;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['gameplay'].pop('fleet_rules');m['gameplay']['fleet_difficulty']=True
-            path.write_text(json.dumps(m));self.p.load_project(path)
+            m=self.p.manifest();m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=8;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['gameplay'].pop('fleet_rules');m['gameplay']['fleet_difficulty']=True
+            path.write_text(json.dumps(legacy_manifest(m)));self.p.load_project(path)
             self.assertTrue(self.p.fleet_difficulty);self.assertEqual(self.p.fleet_rules,preset())
             for invalid in ([],None,[[[]]*3]*6,[[[True]*4]*4]*6,[[[25]*4]*4]*6):
-                before=self.p.manifest();m=self.p.manifest();m['gameplay']['fleet_rules']=invalid;path.write_text(json.dumps(m))
+                before=self.p.manifest();m=self.p.manifest();m['gameplay']['fleet_rules']=invalid;path.write_text(json.dumps(legacy_manifest(m)))
                 with self.assertRaises(ValueError):self.p.load_project(path)
                 self.assertEqual(self.p.manifest(),before)
 
@@ -96,14 +109,14 @@ class DifficultyTests(unittest.TestCase):
 
     def test_schema9_migrates_first_three_and_clears_fourth(self):
         with tempfile.TemporaryDirectory()as f:
-            path=Path(f)/'Old.json';m=self.p.manifest();m['version']=9;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None)
+            path=Path(f)/'Old.json';m=self.p.manifest();m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=9;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None)
             old=[nation[:3]for nation in preset('regional')]
             m['gameplay']['fleet_rules']=old;m['gameplay']['fleet_difficulty']=True
-            path.write_text(json.dumps(m));self.p.load_project(path)
+            path.write_text(json.dumps(legacy_manifest(m)));self.p.load_project(path)
             self.assertTrue(self.p.fleet_difficulty)
             self.assertEqual([nation[:3]for nation in self.p.fleet_rules],old)
             self.assertTrue(all(nation[3]==[-1]*4 for nation in self.p.fleet_rules))
-            before=self.p.manifest();m['gameplay']['fleet_rules'][0].append([-1]*4);path.write_text(json.dumps(m))
+            before=self.p.manifest();m['gameplay']['fleet_rules'][0].append([-1]*4);path.write_text(json.dumps(legacy_manifest(m)))
             with self.assertRaises(ValueError):self.p.load_project(path)
             self.assertEqual(self.p.manifest(),before)
 

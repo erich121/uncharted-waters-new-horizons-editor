@@ -28,7 +28,7 @@ class ShipEditorTests(unittest.TestCase):
         self.assertEqual(len(changes),4)
     def test_invalid_updates_are_atomic(self):
         old=dict(self.p.ships[13])
-        for value in [dict(max_guns=151),dict(max_guns=1),dict(min_crew=70),dict(max_crew=65),dict(name='A'*18),dict(price_gold=320010),dict(price_gold=101),dict(capacity=10),dict(hull=True)]:
+        for value in [dict(max_guns=201),dict(max_guns=1),dict(min_crew=70),dict(max_crew=65),dict(name='A'*18),dict(price_gold=320010),dict(price_gold=101),dict(capacity=10),dict(hull=True)]:
             with self.subTest(value=value),self.assertRaises(ValueError):self.p.update(13,value)
             self.assertEqual(self.p.ships[13],old)
     def test_header_zip_projects_exports_and_no_overwrite(self):

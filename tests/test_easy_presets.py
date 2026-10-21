@@ -12,8 +12,8 @@ from trade_goods import offers,stock_offers
 
 class EasyPresets(unittest.TestCase):
  def setUp(self):self.p=ShipProject(ROOT/'New Horizons (USA).zip')
- def test_all_twelve_pure_repeatable_exportable(self):
-  self.assertEqual(len(PRESETS),13)
+ def test_all_five_pure_repeatable_exportable(self):
+  self.assertEqual(len(PRESETS),5)
   for name in PRESETS:
    p=ShipProject(self.p.source);before=p.manifest();draft,lines=preview(p,name,'2026',name in RANDOMIZED)
    self.assertEqual(p.manifest(),before);self.assertTrue(lines)
@@ -89,5 +89,34 @@ class EasyPresets(unittest.TestCase):
    with self.assertRaises(ValueError):apply(self.p,name,'abcd')
    self.assertEqual(self.p.manifest(),before)
   with self.assertRaises(ValueError):apply(self.p,'unknown','2026')
+
+ def test_hard_mode_combines_fleets_and_development(self):
+  p=self.p;before=p.manifest();apply(p,'Hard Mode');levels=values(p.rom,p.economy_edits)
+  original=stock(p.rom)
+  self.assertTrue(p.fleet_difficulty)
+  for current,base in zip(levels,original):
+   self.assertEqual(current['economy'],base['economy'])
+   self.assertEqual(current['industry'],base['industry']if base['port']in CAPITALS else max(1,(base['industry']*75+50)//100))
+  for key in set(before)-{'gameplay','economy_edits','library_state'}:self.assertEqual(p.manifest()[key],before[key])
+
+ def test_trade_preset_keeps_locations_and_prices(self):
+  p=self.p;apply(p,'Trade & Exploration');new=offers(p.rom,p.goods_edits)
+  for actual,base in zip(new,stock_offers(p.rom)):
+   self.assertEqual([(o['good'],o['price'],o['kind'])for o in actual],[(o['good'],o['price'],o['kind'])for o in base])
+   for a,b in zip(actual,base):self.assertEqual(a['economy_required'],((b['economy_required']*80+500)//1000)*10)
+  self.assertEqual(p.ships,p.original);self.assertFalse(p.free_agent_shuffle['enabled'])
+
+ def test_custom_and_added_ships_survive_all_builtins(self):
+  from content_library import capture_ship,new_id
+  from library_project import load_ship
+  p=self.p;entry=capture_ship(p,10);entry['id']=new_id();entry['ship']['name']='Library Ship'
+  load_ship(p,entry);p.ships[0]['hull']=99
+  before=p.manifest()
+  for name in PRESETS:
+   apply(p,name,'2026')
+   for key in ('edits','added_ships','portraits','ship_descriptions'):
+    self.assertEqual(p.manifest()[key],before[key],(name,key))
+   for key in ('identities','originals','discoveries'):
+    self.assertEqual(p.manifest()['library_state'][key],before['library_state'][key],(name,key))
 
 if __name__=='__main__':unittest.main()

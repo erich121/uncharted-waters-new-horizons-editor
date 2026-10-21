@@ -1,4 +1,4 @@
-"""Items editing, read-only port hub, and Easy Settings integration."""
+"""Items editing, read-only port hub, and Presets integration."""
 import tkinter as tk,json,tempfile,copy
 from tkinter import ttk
 from pathlib import Path
@@ -38,16 +38,17 @@ def run(Editor,rom,report):
    old_port=next(i for i,row in enumerate(defaults)if item in row);panel.port_box.current(old_port);panel.pick();panel.remove_button.invoke();settle();assert item not in values(p.rom,p.item_edits)[old_port]
    panel.restore_button.invoke();panel.enable_box.invoke();settle();assert not p.item_edits and not p.custom_items
    app.switch_section('gameplay');app.gameplay_notebook.select(0);settle()
-   assert app.gameplay_notebook.tab(0,'text')=='Easy Settings'and app.easy_apply.winfo_ismapped()
-   app.easy_preset.set('Busy Ports');app.refresh_easy_preset();app.easy_apply.invoke();settle();assert p.economy_edits and not p.custom_economy
-   before=copy.deepcopy(p.economy_edits);app.easy_apply.invoke();settle();assert p.economy_edits==before
-   app.easy_preset.set('Random Mates');app.refresh_easy_preset();settle();assert app.easy_seed_row.winfo_ismapped()
-   app.easy_seed.set('1234');app.easy_apply.invoke();settle();assert p.free_agent_shuffle==dict(enabled=True,blind=False,seed='1234')
-   for name,key in [('Stronger Flagships','flagships'),('Stronger Fleets','stronger')]:
-    app.easy_preset.set(name);app.refresh_easy_preset();app.easy_apply.invoke();settle();assert p.fleet_difficulty and p.fleet_rules==preset(key)
-   app.easy_preset.set('Random Items');app.refresh_easy_preset();app.easy_apply.invoke();settle()
+   assert app.gameplay_notebook.tab(0,'text')=='Presets'and app.custom_preset_choice.winfo_ismapped()
+   def choose(name):
+    app.custom_preset_name.set(name);app.custom_preset_choice.event_generate('<<ComboboxSelected>>');settle()
+   choose('Trade & Exploration');assert p.economy_edits and not p.custom_economy
+   before=copy.deepcopy(p.economy_edits);choose('Trade & Exploration');assert p.economy_edits==before
+   with patch('character_mods.random_seed',return_value='1234'):choose('Full Randomizer')
+   assert p.free_agent_shuffle['enabled']and p.free_agent_shuffle['seed']=='1234'
+   choose('Classic Plus + Harder');assert p.fleet_difficulty
+   app.open_item_seed();settle()
    assert app.item_shuffle_dialog.winfo_exists()
-   app.item_shuffle_seed.set('1234');app.item_shuffle_mode.set('Shuffle special items');settle()
+   app.item_shuffle_seed.set('1234');app.item_shuffle_mode.set('Shuffle special items');app.item_shuffle_blind.set(False);settle()
    normal=copy.deepcopy(app.item_shuffle_candidates['edits']);assert app.item_shuffle_preview.size()>1
    app.item_shuffle_blind.set(True);settle();assert app.item_shuffle_preview.size()==1 and app.item_shuffle_candidates['edits']!=normal
    app.item_shuffle_buttons[1].invoke();settle();assert p.item_blind and p.item_special_only and p.item_seed=='1234'
@@ -55,12 +56,13 @@ def run(Editor,rom,report):
    mode('Port Information');assert not w.port_item_rows
    app.switch_section('gameplay');app.open_item_seed();settle();assert app.item_shuffle_blind.get()and app.item_shuffle_mode.get()=='Shuffle special items'
    app.item_shuffle_buttons[2].invoke();settle();assert not p.item_edits and p.item_seed is None
-   app.easy_preset.set('Skilled Recruits');app.refresh_easy_preset();app.easy_apply.invoke();settle();assert p.character_edits and not p.custom_mates
+   with patch('character_mods.random_seed',return_value='1234'):choose('Full Randomizer')
+   assert p.effective_character_edits()and not p.custom_mates
    app.switch_data('mates');app.show_mate(79);settle();assert app.mate_field_widgets['leadership'][1].instate(['disabled'])and 'Changed.'in app.section_buttons['mates'].cget('style')
-   app.switch_section('world');mode('Economy');assert w.economy_panel.entries['economy'].instate(['disabled'])and 'Changed.'in app.world_nav.cget('style')
+   choose('Trade & Exploration');app.switch_section('world');mode('Economy');assert w.economy_panel.entries['economy'].instate(['disabled'])and 'Changed.'in app.world_nav.cget('style')
    with patch('tkinter.messagebox.askyesno',return_value=True):app.restore_defaults()
    assert p.build()==(p.rom,[])and not p.item_edits and not p.custom_items and not errors
-  report.write_text(json.dumps(dict(status='PASS',item_add_remove_and_early_offer=True,full_slots_rejected=True,locked_orange_values_export=True,port_information_and_map_follow_items=True,project_rom_ips_roundtrip=True,restore_item_and_global_defaults=True,easy_settings_six_presets_and_item_shuffle_dialog=True,item_shuffle_blind_mode_and_hidden_hub=True,presets_repeat_without_stacking=True,presets_work_while_manual_editing_locked=True),indent=2),encoding='utf-8')
+  report.write_text(json.dumps(dict(status='PASS',item_add_remove_and_early_offer=True,full_slots_rejected=True,locked_orange_values_export=True,port_information_and_map_follow_items=True,project_rom_ips_roundtrip=True,restore_item_and_global_defaults=True,automatic_presets_and_item_shuffle_dialog=True,item_shuffle_blind_mode_and_hidden_hub=True,presets_repeat_without_stacking=True,presets_work_while_manual_editing_locked=True),indent=2),encoding='utf-8')
  except Exception as error:
   import traceback
   report.write_text(json.dumps(dict(status='FAIL',error=str(error),traceback=traceback.format_exc()),indent=2),encoding='utf-8');raise

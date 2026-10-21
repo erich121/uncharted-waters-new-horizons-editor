@@ -1,9 +1,27 @@
 """Small vector UI icons and stretchable rounded surfaces for the Tk editor."""
 from PIL import Image, ImageDraw, ImageTk
+from tkinter import ttk
 
 BG='#f5f7fb'
 HEADER='#f4f7fb'
 BLUE='#0869df'
+
+
+class SectionCard(ttk.Frame):
+    """A consistent header and content surface, without owning layout policy."""
+    def __init__(self, parent, title, clean=False):
+        super().__init__(parent, style='CleanSurface.TFrame'if clean else 'Surface.TFrame', padding=1)
+        header = ttk.Frame(self, style='Card.TFrame'if clean else 'CardHeader.TFrame', padding=(10, 6))
+        header.pack(fill='x', padx=8)
+        self.title_label = ttk.Label(header, text=title, style='CleanCardTitle.TLabel'if clean else 'CardTitle.TLabel')
+        self.title_label.pack(anchor='w')
+        if clean:
+            ttk.Frame(self,height=1,style='CardRule.TFrame').pack(fill='x',padx=18,pady=(0,4))
+        self.body = ttk.Frame(self, style='Card.TFrame', padding=12)
+        self.body.pack(fill='both', expand=True, padx=8, pady=(0, 8))
+
+    def set_title(self, title):
+        self.title_label.configure(text=title)
 
 class EditorTheme:
     def __init__(self,root,style):
@@ -11,6 +29,7 @@ class EditorTheme:
         self.button('TButton','Modern', '#fbfcff','#c8d3e3','#eef5ff')
         self.button('Primary.TButton','PrimaryModern',BLUE,'#075bc3','#075bc3')
         self.surface('Surface.TFrame','Surface', 'white','#d5dfed',8,header=True)
+        self.surface('CleanSurface.TFrame','CleanSurface','white','#d5dfed',8)
         self.surface('Sidebar.TFrame','Sidebar','#f0f4f9','#d8e2ee',8)
         style.configure('SidebarContent.TFrame',background='#f0f4f9')
         style.configure('Sidebar.TLabel',background='#f0f4f9')
@@ -21,6 +40,8 @@ class EditorTheme:
         self.entry('TSpinbox','RoundedSpinbox')
         style.configure('CardHeader.TFrame',background=HEADER)
         style.configure('CardTitle.TLabel',background=HEADER,foreground='#152c50',font=('Segoe UI',12,'bold'))
+        style.configure('CleanCardTitle.TLabel',background='white',foreground='#152c50',font=('Segoe UI',12,'bold'))
+        style.configure('CardRule.TFrame',background='#e1e8f2')
         style.configure('Tab.TButton',background=BG,foreground='#26334b',padding=(18,11),borderwidth=0,relief='flat',width=0)
         style.configure('Active.Tab.TButton',background='white',foreground=BLUE)
         for name in ('Tab.TButton','Active.Tab.TButton','Nav.TButton','Selected.Nav.TButton','Disclosure.TButton'):
@@ -67,6 +88,7 @@ class EditorTheme:
         self.style.element_create(element,'image',normal,('disabled',disabled),('readonly',readonly),('focus',focused),border=5,sticky='nsew')
         old=self.style.layout(style_name)
         self.style.layout(style_name,[(element,old[0][1])])
+        self.style.map(style_name, foreground=[('disabled', '#65748a')])
 
     def icon(self,name,color='#194c85',size=22):
         key=(name,color,size)

@@ -10,9 +10,7 @@ def run(Editor,rom,report):
     report=Path(report);report.parent.mkdir(parents=True,exist_ok=True)
     root=tk.Tk();root.attributes('-topmost',True)
     try:
-        app=Editor(root)
-        with patch('tkinter.filedialog.askopenfilename',return_value=str(rom)):app.open_rom()
-        p=app.project
+        app=Editor(root);app.load_rom(rom);p=app.project
         def settle():
             ready=tk.BooleanVar(root,value=False);root.after(90,lambda:ready.set(True));root.wait_variable(ready);root.update()
         def exposed():
@@ -57,8 +55,18 @@ def run(Editor,rom,report):
             assert app.goods_shuffle_preview.get(0)=='Blind shuffle: destinations are hidden.'
             click(1);assert p.goods_shuffle['blind']
             open_shuffle(app);settle();click(2);assert p.manifest()==before
+            from trade_goods import change,offers
+            specialty=next(o for o in offers(p.rom,[])[0]if o['kind']=='Specialty')
+            p.goods_edits=change(p.rom,[],0,specialty['good'],gate=1000)
+            open_shuffle(app);settle();app.goods_shuffle_mode.set('Shuffle normal goods');app.goods_shuffle_seed.set('1234');settle()
+            planned=app.goods_shuffle_candidates['goods_edits']
+            click(1)
+            assert p.goods_edits==planned
+            assert next(o for o in offers(p.rom,p.goods_edits)[0]if o['kind']=='Specialty')['economy_required']==1000
+            snapshot=p.manifest();open_shuffle(app);settle();click(1);assert p.manifest()==snapshot
+            open_shuffle(app);settle();click(2);assert p.manifest()==before
             assert not errors,errors
-        report.write_text(json.dumps(dict(status='PASS',all_four_buttons_visible=True,real_pointer_clicks=True,window_sizes=['700x590','400x380','500x430','900x700'],random_previews_without_applying=True,cancel_keeps_current_settings=True,three_modes_apply=True,restore_goods=True,blind_mode=True,project_and_rom_ips_roundtrip=True),indent=2),encoding='utf-8')
+        report.write_text(json.dumps(dict(status='PASS',all_four_buttons_visible=True,real_pointer_clicks=True,window_sizes=['700x590','400x380','500x430','900x700'],random_previews_without_applying=True,cancel_keeps_current_settings=True,three_modes_apply=True,restore_goods=True,blind_mode=True,project_and_rom_ips_roundtrip=True,custom_specialty_gate_preserved=True,preview_matches_application=True,reapply_preserves_result=True),indent=2),encoding='utf-8')
     except Exception as error:
         import traceback
         report.write_text(json.dumps(dict(status='FAIL',error=str(error),traceback=traceback.format_exc()),indent=2),encoding='utf-8');raise

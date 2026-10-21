@@ -1,7 +1,8 @@
 """Bounded starting attributes and random free-agent port-slot shuffling."""
 import secrets
 from functools import lru_cache
-from sailors import BASE,STRIDE,ATTRIBUTES,MATE_IDS,CAPTAIN_IDS,decode_sailors,EDITABLE_FIELDS
+from sailors import BASE,STRIDE,ATTRIBUTES,MATE_IDS,CAPTAIN_IDS,PROTAGONIST_IDS,decode_sailors,EDITABLE_FIELDS
+from sailors import LEVEL_FIELDS,CHARACTER_FIELD_OFFSETS
 
 def validate_edits(rom,entries,config=None):
     if not isinstance(entries,list):raise ValueError('Invalid character edits.')
@@ -10,18 +11,21 @@ def validate_edits(rom,entries,config=None):
     for entry in entries:
         if not isinstance(entry,dict)or set(entry)!={'id','field','value'}:raise ValueError('Invalid character edit.')
         i,key,value=entry['id'],entry['field'],entry['value']
-        if type(i)is not int or i not in MATE_IDS+CAPTAIN_IDS or not isinstance(key,str)or key not in EDITABLE_FIELDS:
-            raise ValueError('Only mate and fleet captain attributes and skills can be edited.')
+        if type(i)is not int or i not in PROTAGONIST_IDS+MATE_IDS+CAPTAIN_IDS or not isinstance(key,str)or key not in EDITABLE_FIELDS+LEVEL_FIELDS or(key in LEVEL_FIELDS and i not in PROTAGONIST_IDS):
+            raise ValueError('Only character attributes and skills can be edited.')
         limit=31 if key=='skills'else 100
-        if type(value)is not int or not 0<=value<=limit:raise ValueError('Invalid skill selection.'if key=='skills'else 'Character attributes must be whole numbers from 0 to 100.')
-        baseline=rom[BASE+STRIDE*i+(48 if key=='skills'else 28+ATTRIBUTES.index(key))]
+        minimum=1 if key in LEVEL_FIELDS else 0
+        if type(value)is not int or not minimum<=value<=limit:raise ValueError('Invalid skill selection.'if key=='skills'else 'Starting levels must be whole numbers from 1 to 100.'if key in LEVEL_FIELDS else 'Character attributes must be whole numbers from 0 to 100.')
+        baseline=rom[BASE+STRIDE*i+CHARACTER_FIELD_OFFSETS[key]]
         if key=='skills':
             baseline&=31
             if 69<=i<79 and value&baseline!=baseline:raise ValueError('Story companions must keep their original skills. You can add other skills.')
         if (i,key)in seen:raise ValueError('Duplicate character edit.')
         seen.add((i,key))
-        if value!=projected.get((i,key),baseline):result.append(dict(entry))
-    return sorted(result,key=lambda e:(e['id'],EDITABLE_FIELDS.index(e['field'])))
+        # Explicit protagonist Luck must retain even the stock value: native
+        # new-game initialization normally replaces it with a random40..100.
+        if value!=projected.get((i,key),baseline)or(i<6 and key=='luck'):result.append(dict(entry))
+    return sorted(result,key=lambda e:(e['id'],(EDITABLE_FIELDS+LEVEL_FIELDS).index(e['field'])))
 
 def free_agent_rows(rom):
     return [r for r in decode_sailors(rom)if r['role']=='Free agent']
@@ -253,7 +257,7 @@ def apply(data,rom,edits,config):
     for e in edits:
         at=BASE+STRIDE*e['id']
         if e['field']=='skills':data[at+48]=(rom[at+48]&224)|e['value']
-        else:data[at+28+ATTRIBUTES.index(e['field'])]=e['value']
+        else:data[at+CHARACTER_FIELD_OFFSETS[e['field']]]=e['value']
     for i,port in mapping.items():data[BASE+STRIDE*i+45]=port
 
     for i,sources in name_shuffle(rom,config).items():
@@ -270,7 +274,7 @@ def preview_changes(rom,edits,config):
         fields=[]
         if before['name']!=new['name']:fields.append(('Name',before['name'],new['name']))
         if before['starting_port']!=new['starting_port']:fields.append(('Port',before['starting_port_name'],new['starting_port_name']))
-        for key in ATTRIBUTES:
+        for key in ATTRIBUTES+(LEVEL_FIELDS if before['id']in PROTAGONIST_IDS else ()):
             if before[key]!=new[key]:fields.append((key.capitalize(),before[key],new[key]))
         if before['skills']!=new['skills']:fields.append(('Skills',', '.join(skill_names(before['skills']))or 'None',', '.join(skill_names(new['skills']))or 'None'))
         if fields:changes.append(dict(id=before['id'],name=before['name'],changes=fields))

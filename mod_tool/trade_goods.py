@@ -17,8 +17,9 @@ def stock_offers(rom):
     return result
 
 def validate(rom,edits):
+    """Validate offers; rom=None checks a portable baseline without stock filtering."""
     if not isinstance(edits,list):raise ValueError('Invalid goods edits.')
-    result=[];seen=set();stock=stock_offers(rom)
+    result=[];seen=set();stock=stock_offers(rom)if rom is not None else None
     for row in edits:
         if not isinstance(row,dict)or set(row)!={'port','offers'}or type(row['port'])is not int or not 0<=row['port']<100 or row['port']in seen:raise ValueError('Invalid or duplicate goods port.')
         seen.add(row['port']);offers=row['offers'];goods=set();regular=special=0
@@ -34,7 +35,7 @@ def validate(rom,edits):
             elif offer['kind']=='Specialty':special+=1
             else:raise ValueError('Invalid offer type.')
         if regular>9 or special>1:raise ValueError('A port has room for nine regular goods and one specialty. Remove another good first.')
-        if offers!=stock[row['port']]:result.append(copy.deepcopy(row))
+        if stock is None or offers!=stock[row['port']]:result.append(copy.deepcopy(row))
     return sorted(result,key=lambda row:row['port'])
 
 def offers(rom,edits):
@@ -108,18 +109,25 @@ SHUFFLE_MODES=('normal','specialty','all')
 
 def validate_shuffle(config):
     from character_mods import validate_seed
-    if not isinstance(config,dict)or not {'seed','mode'}<=set(config)or set(config)-{'seed','mode','blind'}or config['mode']not in SHUFFLE_MODES or type(config.get('blind',False))is not bool:
+    if not isinstance(config,dict)or not {'seed','mode'}<=set(config)or set(config)-{'seed','mode','blind','previous','retained_blind'}or config['mode']not in SHUFFLE_MODES or type(config.get('blind',False))is not bool:
         raise ValueError('Choose normal goods, specialty goods or all goods.')
     result=dict(seed=validate_seed(config['seed'])if config['seed']is not None else None,mode=config['mode'])
     if config.get('blind',False):result['blind']=True
+    if 'previous'in config:
+        if config['seed']is None:raise ValueError('Inactive goods shuffle cannot contain a baseline.')
+        result['previous']=validate(None,config['previous'])
+    if 'retained_blind'in config:
+        if config['retained_blind']is not True or not config.get('blind')or config['mode']=='all'or 'previous'not in config:
+            raise ValueError('Invalid retained blind goods settings.')
+        result['retained_blind']=True
     return result
 
-def seeded_shuffle(rom,seed,mode='normal',blind=False):
+def seeded_shuffle(rom,seed,mode='normal',blind=False,base_edits=None):
     """Preserve offer counts, specialties, prices per good and economy gates."""
     import random
     from character_mods import validate_seed
     validate_shuffle(dict(seed=seed,mode=mode,blind=blind));validate_seed(seed)
-    rng=random.Random('NH-trade-v1:'+seed+':'+mode+(':blind'if blind else ''));rows=stock_offers(rom)
+    rng=random.Random('NH-trade-v1:'+seed+':'+mode+(':blind'if blind else ''));rows=offers(rom,base_edits or [])
     kinds=('Regional','Specialty')if mode=='all'else ('Specialty',)if mode=='specialty'else ('Regional',)
     for kind in kinds:
         positions=[(p,i)for p,row in enumerate(rows)for i,o in enumerate(row)if o['kind']==kind]
@@ -129,3 +137,27 @@ def seeded_shuffle(rom,seed,mode='normal',blind=False):
             if a!=b and (any(o['good']==second['good']for o in rows[a])or any(o['good']==first['good']for o in rows[b])):continue
             for field in ('good','price'):first[field],second[field]=second[field],first[field]
     return validate(rom,[dict(port=p,offers=row)for p,row in enumerate(rows)])
+
+
+def shuffle_plan(project, seed, mode='normal', blind=False):
+    """One candidate for previews, presets and application; never mutate project."""
+    config=validate_shuffle(dict(seed=seed,mode=mode,blind=blind))
+    current=offers(project.rom,project.goods_edits)
+    previous=project.goods_shuffle
+    same_scope=previous['seed']is not None and previous['mode']==mode
+    base=copy.deepcopy(previous.get('previous',[])if same_scope else project.goods_edits)
+    retained=previous.get('retained_blind',False)if same_scope else bool(mode!='all'and previous.get('blind',False))
+    if retained:config['blind']=True
+    # Keep economy gates modified after an earlier shuffle (e.g. by a preset).
+    rows=offers(project.rom,base)
+    for before,now in zip(rows,current):
+        for kind in ('Regional','Specialty'):
+            for old,active in zip((o for o in before if o['kind']==kind),(o for o in now if o['kind']==kind)):
+                old['economy_required']=active['economy_required']
+    base=validate(project.rom,[dict(port=p,offers=row)for p,row in enumerate(rows)])
+    if base:config['previous']=base
+    if retained:
+        config.setdefault('previous',[])
+        config['retained_blind']=True
+    edits=seeded_shuffle(project.rom,seed,mode,config.get('blind',False),base)
+    return dict(goods_edits=edits,goods_shuffle=validate_shuffle(config))

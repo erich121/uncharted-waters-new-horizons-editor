@@ -4,6 +4,7 @@ No item, shop, pricing-curve, battle-control or campaign patches are included.
 Existing portraits and icons are shared. IDs25..29 use new templates65..69.
 """
 import re,struct,hashlib
+from ship_limits import MAX_ADDED_SHIPS
 def sha(data):return hashlib.sha256(data).hexdigest()
 RAM_DEFAULTS=0x0780
 RAM_SPECS=0x087A
@@ -141,7 +142,7 @@ class Code:
 
 def install_used_market(ships, write, Code, far_jump, region_table=0x214400, gate_table=0x214480, town_table=0x214000):
     count=len(ships)
-    if not 1<=count<=5:raise ValueError('Expected1..5 models')
+    if not 1<=count<=MAX_ADDED_SHIPS:raise ValueError('Expected1..10 models')
     limit=(25+count).to_bytes(2,'little')
     multiply='48 a9 00 00'+(' 18 63 01'*count)
     address=lambda at: (at+0xC00000).to_bytes(3,'little')
@@ -170,8 +171,11 @@ def install_used_market(ships, write, Code, far_jump, region_table=0x214400, gat
     spawn.emit('a5 30 0a aa a5 32 95 40 e6 30').mark('next')
     spawn.emit('e6 32 a5 32 c9').emit(limit).branch(0x90, 'scan')
     spawn.emit('a5 30').branch_far(0xF0, 'finish')
-    spawn.emit('d4 30 22 57 0a c1 68 a5 00 0a aa b5 40 85 34 c9 22 00').branch(0xD0, 'slot')
-    spawn.emit('f4 0a 00 22 57 0a c1 68 a5 00').branch_far(0xD0, 'finish')
+    spawn.emit('d4 30 22 57 0a c1 68 a5 00 0a aa b5 40 85 34')
+    if count<=5:
+        # Retain byte-identical older exports; hull34 cannot occur at <=5.
+        spawn.emit('c9 22 00').branch(0xD0,'slot')
+        spawn.emit('f4 0a 00 22 57 0a c1 68 a5 00').branch_far(0xD0,'finish')
     spawn.mark('slot').emit('a2 00 00').mark('empty')
     spawn.emit('bf fc 8c 7e 29 ff 00 c9 ff 00').branch(0xF0, 'store')
     spawn.emit('e8 e0 03 00').branch(0x90, 'empty').emit('a2 02 00')
@@ -214,7 +218,7 @@ def make_fleet(rom, design,allow_locked_ports=()):
     initial, report = make_pack(rom)
     data = bytearray(initial)
     ships = design['ships'];count=len(ships)
-    assert 1<=count<=5
+    if not 1<=count<=MAX_ADDED_SHIPS:raise ValueError('Expected1..10 models')
     changes = []
 
     def write(offset, value, reason, expected=None):
@@ -283,7 +287,9 @@ def make_fleet(rom, design,allow_locked_ports=()):
     stocks = bytearray()
     for group in range(11):
         entries = [v for v in rom[0x8FAE7+group*8:0x8FAEF+group*8] if v != 255]
-        entries += [s['id'] for s in ships if group in s['stock_groups']]
+        # Above five, the backend installs the full per-town new-build table.
+        # Native used fallback keeps stock types; extras use guarded generation.
+        if count<=5:entries += [s['id'] for s in ships if group in s['stock_groups']]
         if len(entries) > 16:
             raise ValueError('A regional stock exceeds its expanded capacity')
         stocks.extend(bytes(entries).ljust(16, b'\xff'))
@@ -333,7 +339,7 @@ def make_fleet(rom, design,allow_locked_ports=()):
                   original_ship_count=25, original_graphics_preserved=True)
     report['portraits'] = portrait_status
     report['used_market'] = dict(enabled=True, max_extra_offers=1, ordinary_offer_chance_percent=25,
-                                sovereign_additional_gate='1 in 10 after selection',
+                                sovereign_additional_gate='unreachable legacy hull34 guard'if count<=5 else None,
                                 original_cache_records=3, original_offer_slots=5,
                                 town_industry_region_guards=True)
     report['changes'].extend(changes)

@@ -49,9 +49,17 @@ def run(Editor,rom_path,report_path):
             b.event_generate('<Enter>',x=x,y=y,rootx=sx,rooty=sy)
             b.event_generate('<ButtonPress-1>',x=x,y=y,rootx=sx,rooty=sy,time=event_clock)
             b.event_generate('<ButtonRelease-1>',x=x,y=y,rootx=sx,rooty=sy,time=event_clock+1);settle()
+        def open_fleets():
+            if hasattr(app,'fleet_dialog') and app.fleet_dialog.winfo_exists():return
+            link=app.world_gameplay_settings.fleet_link
+            app.scroll.focus_visible(SimpleNamespace(widget=link));settle()
+            assert root.winfo_containing(link.winfo_rootx()+5,link.winfo_rooty()+5)==link
+            link.event_generate('<Button-1>');settle()
         def select_ship(i):
             nonlocal event_clock
             event_clock+=1000
+            if root.state()=='iconic':
+                root.deiconify();root.lift();settle()
             app.list.see(i);settle();box=app.list.bbox(i);assert box
             # Direct event delivery alone bypasses covering widgets. Verify the
             # target is actually exposed, not just populated in memory.
@@ -71,7 +79,7 @@ def run(Editor,rom_path,report_path):
             assert pos==(app.port_list.winfo_rootx(),app.port_list.winfo_rooty()),'list moved on focus'
             canvas=app.scroll.canvas;canvas.xview_moveto(0)
             top=app.port_list.winfo_rooty()-app.scroll.content.winfo_rooty()+box[1]
-            total=float(canvas.itemcget(app.scroll.window,'height'));origin=canvas.yview()[0]*total
+            total=float(canvas.cget('scrollregion').split()[3]);origin=canvas.yview()[0]*total
             if top<origin:canvas.yview_moveto(max(0,top-4)/total)
             elif top+box[3]>origin+canvas.winfo_height():canvas.yview_moveto(max(0,top+box[3]+4-canvas.winfo_height())/total)
             settle()
@@ -85,12 +93,12 @@ def run(Editor,rom_path,report_path):
             assert widget.winfo_ismapped(),(str(widget),app.notebook.index('current'),app.scroll.canvas.yview(),app.scroll.canvas.winfo_height(),app.scroll.content.winfo_height(),widget.winfo_rooty(),app.scroll.content.winfo_ismapped())
             assert root.winfo_containing(widget.winfo_rootx()+widget.winfo_width()//2,widget.winfo_rooty()+widget.winfo_height()//2)==widget,'input field is covered or clipped'
             widget.delete(0,'end');widget.insert(0,str(text));settle()
-        with tempfile.TemporaryDirectory()as f,patch('tkinter.messagebox.showerror',side_effect=lambda *a,**k:errors.append(a)),patch('tkinter.messagebox.showinfo'),patch('tkinter.messagebox.askyesno',return_value=True):
+        with tempfile.TemporaryDirectory()as f,patch.dict(os.environ,{'LOCALAPPDATA':str(Path(f)/'appdata')}),patch('tkinter.messagebox.showerror',side_effect=lambda *a,**k:errors.append(a)),patch('tkinter.messagebox.showinfo'),patch('tkinter.messagebox.askyesno',return_value=True):
             f=Path(f)
             with patch('tkinter.filedialog.askopenfilename',return_value=str(rom_path)):button('Open stock ROM')
             assert app.entries['hull'].instate(['disabled'])
             app.custom_ships_box.invoke();settle()
-            assert all(card.panel.winfo_manager()=='grid' for card in app.spec_sections), 'all six specification panels must always be present'
+            assert all(card.panel.winfo_manager()=='grid' for card in app.spec_sections), 'all specification panels must always be present'
             assert app.search_frame.winfo_ismapped(),'search should be visible above the list'
             enter(app.search_entry,'GALLEON');assert app.ship_rows==[10,19]
             box=app.list.bbox(0);assert box
@@ -182,7 +190,7 @@ def run(Editor,rom_path,report_path):
             cb=app.difficulty_check
             app.scroll.focus_visible(SimpleNamespace(widget=cb));settle();toggle_fix();auto_settle()
             assert app.project.fleet_difficulty and str(app.difficulty_settings_button.cget('state'))=='normal'
-            app.scroll.focus_visible(SimpleNamespace(widget=app.difficulty_settings_button));settle();button('Configure nations…')
+            open_fleets()
             assert app.fleet_dialog.winfo_exists()
             app.fleet_nation.current(3);app.fleet_nation.event_generate('<<ComboboxSelected>>');settle()
             widget=app.fleet_choice_widgets[1][0]
@@ -192,7 +200,8 @@ def run(Editor,rom_path,report_path):
                 if root.winfo_containing(widget.winfo_rootx()+widget.winfo_width()//2,widget.winfo_rooty()+widget.winfo_height()//2)==widget:break
             assert root.winfo_containing(widget.winfo_rootx()+widget.winfo_width()//2,widget.winfo_rooty()+widget.winfo_height()//2)==widget,(app.fleet_dialog.geometry(),widget.winfo_geometry(),str(root.winfo_containing(widget.winfo_rootx()+widget.winfo_width()//2,widget.winfo_rooty()+widget.winfo_height()//2)))
             widget.current(15);widget.event_generate('<<ComboboxSelected>>');settle()
-            assert 'Not used:'in app.fleet_preview.cget('text')
+            assert 'Not used:'not in app.fleet_preview.cget('text')
+            assert app.fleet_draft[3][0][1]==14 and 'Frigate'in app.fleet_preview.cget('text')
             widget.current(16);widget.event_generate('<<ComboboxSelected>>');settle()
             escort=app.fleet_choice_widgets[1][1];escort.current(16);escort.event_generate('<<ComboboxSelected>>');settle()
             fourth=app.fleet_choice_widgets[1][3];fourth.current(16);fourth.event_generate('<<ComboboxSelected>>');settle()
@@ -205,7 +214,7 @@ def run(Editor,rom_path,report_path):
                     assert root.winfo_containing(widget.winfo_rootx()+widget.winfo_width()//2,widget.winfo_rooty()+widget.winfo_height()//2)==widget,'nation selector clipped'
             button('Apply settings')
             assert app.project.fleet_rules[3][1][1]==15 and app.project.fleet_rules[3][3][1]==15
-            app.scroll.focus_visible(SimpleNamespace(widget=app.difficulty_settings_button));settle();button('Configure nations…')
+            open_fleets()
             assert app.fleet_preset_box.get()=='Custom settings'
             app.fleet_preset_box.current(0);app.fleet_preset_box.event_generate('<<ComboboxSelected>>');settle()
             assert all(v==-1 for n in app.fleet_draft for r in n for v in r)
@@ -215,7 +224,7 @@ def run(Editor,rom_path,report_path):
             button('Apply settings')
             from fleet_difficulty import preset
             assert app.project.fleet_rules==preset('regional')
-            app.scroll.focus_visible(SimpleNamespace(widget=app.difficulty_settings_button));settle();button('Configure nations…')
+            open_fleets()
             assert app.fleet_preset_box.get()=='Regional variety'
             app.fleet_preset_box.current(0);app.fleet_preset_box.event_generate('<<ComboboxSelected>>');settle()
             button('Cancel');assert app.project.fleet_rules==preset('regional')
@@ -261,7 +270,7 @@ def run(Editor,rom_path,report_path):
             auto_settle();assert not errors
             assert app.project.ships[3]['capacity']-app.project.ships[3]['max_guns']-app.project.ships[3]['max_crew']==420
             expected_factory=app.project.ships[3]['factory_cargo']
-            select_ship(10);button('Add ship (up to 5)');assert app.selected==25
+            select_ship(10);button('Add ship (up to 10)');assert app.selected==25
             enter(app.entries['name'],'Port Test Ship');enter(app.extra_entries['capacity'],700+int(app.extra_vars['factory_guns'].get())+int(app.extra_vars['factory_crew'].get()))
             app.notebook.select(1);settle();click_port(31)
             assert list(app.port_list.curselection())==[31]
@@ -271,10 +280,10 @@ def run(Editor,rom_path,report_path):
             click_port(30,True);assert set(app.port_list.curselection())=={30,31},list(app.port_list.curselection())
             click_port(31);assert list(app.port_list.curselection())==[31]
             auto_settle();assert 'Dublin'in app.port_summary.cget('text')
-            for _ in range(4):button('Add ship (up to 5)')
-            assert len(app.project.ships)==30
+            for _ in range(9):button('Add ship (up to 10)')
+            assert len(app.project.ships)==35
             # Test errors through the same buttons the user clicks.
-            button('Add ship (up to 5)');assert len(errors)==1 and 'five'in errors[-1][1];errors.clear()
+            button('Add ship (up to 10)');assert len(errors)==1 and 'ten'in errors[-1][1];errors.clear()
             select_ship(25);app.notebook.select(1);settle();click_port(0)
             auto_settle();assert not errors and 'cannot reach'in app.status.cget('text')
             click_port(31);auto_settle();assert not errors
@@ -293,17 +302,22 @@ def run(Editor,rom_path,report_path):
             select_ship(3);button('Restore selected ship');assert app.project.ships[3]==app.project.original[3]
             with patch('tkinter.filedialog.asksaveasfilename',return_value=str(out)):button('Export ROM and IPS')
             assert errors and 'already exists'in errors[-1][1];errors.clear()
-            select_ship(29);button('Remove added ship');assert len(app.project.ships)==29
+            select_ship(34);button('Remove added ship');assert len(app.project.ships)==34
+            assert app.library.store.root.is_relative_to(f),'workflow test touched the real Library'
             for size in ('1672x940','1920x1080','1440x900','1100x820','640x480'):
-                root.geometry(size+'+0+0');settle();select_ship(27);select_ship(28)
-                assert app.list.winfo_height()>=100,'ship list has too little height'
+                # Restore a minimized Windows test window before hit-testing.
+                if size=='1672x940':root.iconify();settle()
+                root.deiconify();root.lift();root.geometry(size+'+0+0');settle();select_ship(27);select_ship(28)
+                # A long verified-ROM filename can add a toolbar line at640px.
+                # Keep >=3 list rows visible; selection/scrolling are hit-tested.
+                assert app.list.winfo_height()>=(50 if root.winfo_height()<620 else 100),'ship list has too little height'
                 assert root.winfo_containing(app.restore_button.winfo_rootx()+10,app.restore_button.winfo_rooty()+10)==app.restore_button
                 app.notebook.select(0);settle()
                 assert app.scroll.canvas.yview()[0]==0.0,'new selection must start at the top'
                 assert app.heading.winfo_rooty()>=app.scroll.canvas.winfo_rooty(),'selected ship heading is clipped'
                 assert app.entries['hull'].winfo_width()<220,'numeric input stretches across the card'
                 if size in ('1440x900','1672x940','1920x1080'):
-                    assert app.card_columns==3,'wide ship settings should use three columns'
+                    assert app.card_columns==2,'desktop ship settings should keep two stable columns'
                     assert app.spec_sections[0].winfo_rootx()<app.spec_sections[1].winfo_rootx()
                     assert app.scroll.canvas.xview()[1]==1.0,'wide settings should not need horizontal scrolling'
                     bottom=app.scroll.canvas.winfo_rooty()+app.scroll.canvas.winfo_height()
@@ -318,7 +332,11 @@ def run(Editor,rom_path,report_path):
                 app.notebook.select(0);settle()
         report=dict(status='PASS',fourth_ship_edit_and_project_roundtrip=True,disabled_fleet_settings_cannot_open=True,preset_selection_updates_immediately_and_reopen_matches=True,nation_dialog_edit_preview_cancel_presets_and_small_window=True,difficulty_checkbox_export_project_roundtrip=True,reference_sidebar_proportions=True,capacity_and_starting_always_present=True,capacity_and_starting_editable=True,icon_tab_buttons_clickable=True,all_six_ship_panels_visible=True,ship_name_input_wider=True,startup_heading_visible=True,new_selection_starts_at_top=True,numeric_input_width_bounded=True,automatic_ship_and_gameplay_edits=True,empty_editor_apply_disabled=True,reference_layout_responsive_cards=True,all_four_ship_tabs_and_gameplay_section_reachable=True,separate_availability_graphics=True,search_visible_above_list=True,filtered_record_selection=True,clearing_search_restores_list=True,window_sizes=['640x480','1100x820','1440x900','1672x940','1920x1080'],portrait_import_cancel_apply_restore_project_export=True,small_window='640x480',fleet_checkbox_export_project_roundtrip=True,original_ports_industry_export_restore_roundtrip=True,repair_checkbox_on_off_roundtrip=True,repair_enabled_export_verified=True,real_button_callbacks=True,real_button_pointer_events=True,all_used_buttons_exposed=True,real_list_clicks=True,ship_name_click_targets_visible=True,
             calculated_cargo_readonly=True,capacity_updates_both_cargo_displays=True,original_capacity_edit=True,new_ship_port_replace_and_multiselect=True,cargo_port_project_roundtrip=True,
-            full_five_additions=True,restore_remove=True,invalid_capital_and_sixth_ship_feedback=True,
+            minimized_test_window_restored=True,full_ten_additions=True,restore_remove=True,invalid_capital_and_eleventh_ship_feedback=True,
             rom_and_ips_verified=True,overwrite_refusal=True)
         report_path.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8');print(json.dumps(report))
+    except Exception as error:
+        import traceback
+        report_path.write_text(json.dumps(dict(status='FAIL',error=str(error),traceback=traceback.format_exc(),geometry=root.geometry(),window_state=root.state(),panels=[dict(y=c.panel.winfo_rooty(),height=c.panel.winfo_height())for c in app.spec_sections],viewport_bottom=app.scroll.canvas.winfo_rooty()+app.scroll.canvas.winfo_height()),indent=2),encoding='utf-8')
+        raise
     finally:root.destroy()

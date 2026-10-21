@@ -1,7 +1,7 @@
 """Review a prepared preset before changing the project."""
 import tkinter as tk
 from tkinter import ttk
-from easy_presets import PRESETS,RANDOMIZED,preview,apply_plan
+from easy_presets import PRESETS,LEGACY_PRESETS,RANDOMIZED,preview,apply_plan
 
 def open_preview(app):
  project=app.project;name=app.easy_preset.get();seed=app.easy_seed.get();blind=app.easy_blind.get()
@@ -10,7 +10,7 @@ def open_preview(app):
  dialog=tk.Toplevel(app.root);dialog.title('Review preset — '+name);dialog.geometry('780x570');dialog.minsize(480,360);dialog.transient(app.root);dialog.grab_set()
  frame=ttk.Frame(dialog,padding=16);frame.pack(fill='both',expand=True)
  ttk.Label(frame,text=name,font=('Segoe UI',16,'bold')).pack(anchor='w')
- description=ttk.Label(frame,text=PRESETS.get(name,'Legacy preset'),wraplength=720);description.pack(anchor='w',pady=(8,12))
+ description=ttk.Label(frame,text=PRESETS.get(name,LEGACY_PRESETS.get(name,'Legacy preset')),wraplength=720);description.pack(anchor='w',pady=(8,12))
  if name in RANDOMIZED:ttk.Label(frame,text=('Blind shuffle • Destinations hidden'if blind else 'Seed '+seed)+' • New game required').pack(anchor='w',pady=(0,8))
  footer=ttk.Frame(frame);footer.pack(side='bottom',fill='x',pady=(12,0))
  box=ttk.Frame(frame);box.pack(fill='both',expand=True)

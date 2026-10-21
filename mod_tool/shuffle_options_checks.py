@@ -12,7 +12,7 @@ def run(Editor,rom,report):
    done=tk.BooleanVar(root,value=False);root.after(150,lambda:done.set(True));root.wait_variable(done);root.update()
   with patch('tkinter.messagebox.showerror',side_effect=lambda *a,**k:errors.append(a)):
    app.switch_section('gameplay');app.gameplay_notebook.select(2);settle()
-   assert list(app.world_gameplay_sections)==['Fleets','Mates','Items','Trade']
+   assert list(app.world_gameplay_sections)==['Fleets','Mates','Items','Trade','Ships','Discoveries']
    for mode in ('Shuffle normal goods','Shuffle specialty goods','Shuffle all goods'):
     app.open_goods_seed();settle();before=p.manifest();app.goods_shuffle_seed.set('2026');app.goods_shuffle_mode.set(mode);settle();assert app.goods_shuffle_candidates['edits']
     app.goods_shuffle_buttons[1].invoke();settle();assert p.goods_shuffle['seed']=='2026'and p.goods_edits and not p.custom_goods

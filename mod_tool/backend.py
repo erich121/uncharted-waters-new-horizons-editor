@@ -1,15 +1,17 @@
 """Stock-USA ship editing plus1..5 independent additive hulls; no save writes."""
-import hashlib,json,struct,zipfile,copy
+import hashlib,json,struct,zipfile,copy,os
 from decimal import Decimal,InvalidOperation
 from pathlib import Path
+from ship_limits import MAX_ADDED_SHIPS, MAX_SHIPS
 
 ROM_SHA='64bc4707f422661a66618088887e2363a5f896ea683c58984fffd96dd21ab5f0'
-TOOL_VERSION='1.0.1'
+TOOL_VERSION='1.1.0'
 MODEL_BASE=0x8cbb6
 SPEC_BASE=0x8ce27
 FIELDS=('name','hull','turning','power','max_guns','min_crew','max_crew','price_gold')
-EDIT_FIELDS=FIELDS+('capacity','factory_cargo')
-UPDATE_FIELDS=EDIT_FIELDS+('yard_cargo',)
+EDIT_FIELDS=FIELDS+('capacity','factory_cargo','factory_crew','factory_guns')
+# Original starting crew is a derived edit when lowering crew capacity.
+UPDATE_FIELDS=FIELDS+('capacity','factory_cargo','yard_cargo','factory_guns','factory_crew')
 EXTRA_FIELDS=('base_hull','capacity','industry','factory_guns','factory_crew','ports')
 CAPITALS=(0,1,2,8,29,33,77)
 
@@ -22,12 +24,12 @@ def validate_extra(s,rom,allow_locked_ports=()):
     if not isinstance(s,dict):raise ValueError('Each added ship must be a ship record.')
     expected=set(decode(rom)[0])|{'base_hull','ports'}
     if set(s)!=expected:raise ValueError('Unknown or missing added-ship fields.')
-    if type(s['id'])is not int or not 25<=s['id']<30:raise ValueError('Added ship ID outside25..29.')
+    if type(s['id'])is not int or not 25<=s['id']<MAX_SHIPS:raise ValueError('Added ship ID outside25..34.')
     if type(s['base_hull'])is not int or not 0<=s['base_hull']<25:raise ValueError('Choose an original hull for graphics and build-time family.')
     dummy=dict(s);dummy.pop('base_hull');dummy.pop('ports')
     # Added ships have fully editable allocations; apply the common bounds without stock grandfathering.
     validate(dummy,dict(dummy))
-    for k,lo,hi in [('capacity',1,2000),('industry',0,1000),('factory_guns',0,150),('factory_crew',1,500)]:
+    for k,lo,hi in [('capacity',1,2000),('industry',0,1000),('factory_guns',0,200),('factory_crew',1,500)]:
         if type(s[k])is not int or not lo<=s[k]<=hi:raise ValueError(f'{k.replace("_"," ")} must be {lo}–{hi}.')
     if s['industry']%10:raise ValueError('Industry requirement must be a multiple of10.')
     if s['factory_guns']>s['max_guns']or not s['min_crew']<=s['factory_crew']<=s['max_crew']:
@@ -76,16 +78,19 @@ def validate(row,original):
     name=row['name']
     if not isinstance(name,str)or not name.strip()or len(name)>17 or '%'in name or any(ord(c)<32 or ord(c)>126 for c in name):
         raise ValueError('Ship names need 1–17 printable English characters, without %.')
-    ranges=dict(hull=(1,100),turning=(1,100),power=(1,100),max_guns=(0,150),min_crew=(1,255),max_crew=(10,500),price_gold=(10,320000),capacity=(1,2000),factory_cargo=(0,2000))
+    ranges=dict(hull=(1,100),turning=(1,100),power=(1,100),max_guns=(0,200),min_crew=(1,255),max_crew=(10,500),price_gold=(10,320000),capacity=(1,2000),factory_cargo=(0,2000),factory_crew=(1,500),factory_guns=(0,200))
     for key,(low,high)in ranges.items():
         if type(row[key])is not int or not low<=row[key]<=high:raise ValueError(f'{key.replace("_"," ")} must be a whole number from {low} to {high}.')
     if row['max_crew']%10:raise ValueError('Maximum crew must be a multiple of 10.')
     if row['price_gold']%10:raise ValueError('The base price must be a multiple of 10 gold (0.001 bar).')
     if row['min_crew']>row['max_crew']:raise ValueError('Minimum crew cannot exceed maximum crew.')
-    if row['max_guns']!=original['max_guns'] and row['max_guns']<original['factory_guns']:
+    if row['max_guns']!=original['max_guns'] and row['max_guns']<row['factory_guns']:
         raise ValueError('The gun limit cannot be below the factory gun allocation.')
-    if row['max_crew']!=original['max_crew'] and row['max_crew']<original['factory_crew']:
-        raise ValueError('The crew limit cannot be below the existing factory crew allocation.')
+    if row['factory_guns']>row['max_guns']:raise ValueError('Starting guns exceed the gun limit.')
+    if row['factory_crew']>row['max_crew'] and (row['factory_crew'],row['max_crew'])!=(original['factory_crew'],original['max_crew']):
+        raise ValueError('Starting crew spaces must fit the crew capacity.')
+    if row['factory_crew']<row['min_crew'] and row['factory_crew']!=original['factory_crew']:
+        raise ValueError('Starting crew spaces must cover the minimum sailors.')
     if row['capacity']!=row['factory_guns']+row['factory_crew']+row['factory_cargo']:
         raise ValueError('Total capacity must equal factory guns + crew spaces + cargo.')
     if row['capacity']<row['max_guns']+row['max_crew']:
@@ -95,6 +100,12 @@ def fit_values(previous,values):
     values=copy.deepcopy(values);yard=values.pop('yard_cargo',None)
     if yard is not None and (type(yard)is not int or yard<0):raise ValueError('Shipyard cargo capacity needs a nonnegative whole number.')
     row=copy.deepcopy(previous);row.update(values)
+    # A lower crew limit frees starting spaces for cargo. Explicit new fittings
+    # remain strict; do not silently replace an intentionally supplied allocation.
+    if ('max_crew'in values and type(row['max_crew'])is int and type(row['factory_crew'])is int
+        and row['max_crew']!=previous['max_crew'] and row['max_crew']<row['factory_crew']
+        and ('factory_crew'not in values or row['factory_crew']==previous['factory_crew'])):
+        row['factory_crew']=row['max_crew']
     for key in ('capacity','factory_guns','factory_crew','factory_cargo'):
         if type(row[key])is not int:raise ValueError(key.replace('_',' ')+' needs a whole number.')
     cargo_changed='factory_cargo'in values and row['factory_cargo']!=previous['factory_cargo']
@@ -143,12 +154,15 @@ class ShipProject:
     def __init__(self,path):
         self.source=Path(path).resolve();self.rom,self.header=read_stock(self.source)
         self.original=decode(self.rom);self.ships=[dict(s)for s in self.original]
+        from content_library import stock_id
+        self.ship_identities=[stock_id(i)for i in range(25)];self.library_bases={};self.ship_descriptions={}
+        self.item_price_edits=[];self.discovery_easy=False;self.instant_shipbuilding=False;self.starting_gold=None;self.fifty_year_campaign=False;self.custom_discoveries=False;self.discovery_rewrites=False;self.discovery_entries={};self.discovery_identities=[__import__('discovery_content').stock_id(i)for i in range(98)]
         self.project_path=None;self.repair_safeguard=False;self.fleet_control=False;self.fleet_difficulty=False;self.portraits={}
         from fleet_difficulty import preset
         self.fleet_rules=preset()
         self.shipbuilding_shuffle=__import__('shipbuilding_shuffle').default()
         self.goods_shuffle=dict(seed=None,mode='normal')
-        self.item_special_only=False;self.item_blind=False;self.item_special=False;self.item_seed=None;self.item_edits=[];self.custom_items=False;self.custom_ships=False;self.custom_mates=False;self.custom_captains=False;self.custom_goods=False;self.custom_economy=False;self.economy_edits=[];self.goods_edits=[];self.character_edits=[];self.free_agent_shuffle=dict(enabled=False,blind=False,seed='0000')
+        self.item_special_only=False;self.item_blind=False;self.item_special=False;self.item_seed=None;self.item_edits=[];self.custom_items=False;self.custom_ships=False;self.custom_mates=False;self.custom_captains=False;self.custom_characters=False;self.custom_goods=False;self.custom_economy=False;self.economy_edits=[];self.goods_edits=[];self.character_edits=[];self.free_agent_shuffle=dict(enabled=False,blind=False,seed='0000')
         catalog=ports(self.rom)
         self.stock_availability=[dict(ports=[p['id']for p in catalog if i in self.rom[0x8fae7+p['group']*8:0x8faef+p['group']*8]],industry=s['industry'])for i,s in enumerate(self.original)]
         self.original_availability=copy.deepcopy(self.stock_availability)
@@ -171,7 +185,11 @@ class ShipProject:
         for k in ('ports','industry'):
             if k in values:offer[k]=values.pop(k)
         self.validate_availability(i,offer)
-        row=fit_values(self.ships[i],values);validate(row,self.original[i])
+        row=fit_values(self.ships[i],values)
+        if i in self.library_bases:
+            from content_library import capture_ship,validate_ship
+            entry=capture_ship(self,i);entry['ship']={k:v for k,v in row.items()if k!='id'};entry['ship']['industry']=offer['industry'];entry['availability']=copy.deepcopy(offer);validate_ship(entry,self.rom)
+        else:validate(row,self.original[i])
         offers=self.all_offers();offers[i]=offer;self.validate_offer_counts(offers)
         if offer!=self.original_availability[i]:self.shipbuilding_shuffle=__import__('shipbuilding_shuffle').default()
         self.ships[i]=row;self.original_availability[i]=offer
@@ -206,26 +224,38 @@ class ShipProject:
             if sum(port['id']in o['ports']for o in offers)>16:raise ValueError(f"{port['name']} exceeds the 16-ship new-build menu limit.")
 
     def changes(self):
-        if not 25<=len(self.ships)<=30:raise ValueError('You may add up to five ships.')
+        if not 25<=len(self.ships)<=MAX_SHIPS:raise ValueError('You may add up to ten ships.')
         for i,row in enumerate(self.ships):
-            if i<25:validate(row,self.original[i])
+            if i<25:
+                if i in self.library_bases:
+                    from content_library import capture_ship
+                    capture_ship(self,i)
+                else:validate(row,self.original[i])
             else:validate_extra(row,self.economy_rom(),CAPITALS)
         return [dict(id=i,field=k,before=self.original[i][k],after=s[k])for i,s in enumerate(self.ships[:25])for k in EDIT_FIELDS if s[k]!=self.original[i][k]]
 
     def add_ship(self,base_hull=10):
-        if len(self.ships)>=30:raise ValueError('This version supports five added ships.')
+        if len(self.ships)>=MAX_SHIPS:raise ValueError('This version supports ten added ships.')
         if type(base_hull)is not int or not 0<=base_hull<25:raise ValueError('Invalid original hull.')
-        s=dict(self.ships[base_hull]);s.update(id=len(self.ships),name=f'New Ship {len(self.ships)-24}',base_hull=base_hull,ports=[0],industry=0)
+        offers=self.all_offers()
+        default_port=next((p['id']for p in ports(self.rom)if p['group']<11 and sum(p['id']in o['ports']for o in offers)<16),None)
+        if default_port is None:raise ValueError('No shipyard has room for another new-build offer.')
+        s=dict(self.ships[base_hull]);s.update(id=len(self.ships),name=f'New Ship {len(self.ships)-24}',base_hull=self.library_bases.get(base_hull,base_hull),ports=[default_port],industry=0)
         # Some stock factory crews exceed their refit cap; new ships must be internally consistent.
         s['max_crew']=max(s['max_crew'],((s['factory_crew']+9)//10)*10)
         s['factory_crew']=max(s['factory_crew'],s['min_crew'])
         s['factory_cargo']=s['capacity']-s['factory_guns']-s['factory_crew']
         s['capacity']=s['factory_guns']+s['factory_crew']+s['factory_cargo']
-        validate_extra(s,self.economy_rom());self.validate_offer_counts(self.all_offers()+[dict(ports=s['ports'],industry=s['industry'])]);self.ships.append(s);return s['id']
+        validate_extra(s,self.economy_rom());self.validate_offer_counts(self.all_offers()+[dict(ports=s['ports'],industry=s['industry'])]);self.ships.append(s);self.ship_identities.append(__import__('content_library').new_id())
+        if base_hull in self.portraits:self.portraits[s['id']]=self.portrait_raw(base_hull)
+        if base_hull in self.ship_descriptions:self.ship_descriptions[s['id']]=self.ship_descriptions[base_hull]
+        return s['id']
 
     def remove_ship(self,i):
         if type(i)is not int or not 25<=i<len(self.ships):raise ValueError('Only added ships can be removed.')
-        self.ships.pop(i)
+        self.ships.pop(i);self.ship_identities.pop(i)
+        self.ship_descriptions={n-(n>i):v for n,v in self.ship_descriptions.items()if n!=i}
+        self.library_bases={n-(n>i):v for n,v in self.library_bases.items()if n!=i}
         self.fleet_rules=[[[(-1 if target==i else target-1 if target>i else target)for target in role]for role in nation]for nation in self.fleet_rules]
         self.portraits={n-(n>i):raw for n,raw in self.portraits.items()if n!=i}
         for n,s in enumerate(self.ships):s['id']=n
@@ -234,7 +264,7 @@ class ShipProject:
         if type(i)is not int or not 0<=i<len(self.ships):raise ValueError('Invalid portrait ship ID.')
         if i in self.portraits:return self.portraits[i]
         from portraits import original_raw
-        return original_raw(self.rom,i if i<25 else self.ships[i]['base_hull'])
+        return original_raw(self.rom,self.library_bases.get(i,i if i<25 else self.ships[i]['base_hull']))
 
     def set_portrait(self,i,raw):
         if type(i)is not int or not 0<=i<len(self.ships):raise ValueError('Invalid portrait ship ID.')
@@ -246,12 +276,20 @@ class ShipProject:
 
     def update_character(self,i,values):
         from character_mods import validate_edits
-        from sailors import ATTRIBUTES,MATE_IDS,CAPTAIN_IDS,EDITABLE_FIELDS
-        if type(i)is not int or i not in MATE_IDS+CAPTAIN_IDS or not isinstance(values,dict)or any(k not in EDITABLE_FIELDS for k in values):
-            raise ValueError('Only existing mate/captain attributes and skills can be edited.')
+        from sailors import ATTRIBUTES,MATE_IDS,CAPTAIN_IDS,PROTAGONIST_IDS,EDITABLE_FIELDS,LEVEL_FIELDS
+        if type(i)is not int or i not in PROTAGONIST_IDS+MATE_IDS+CAPTAIN_IDS or not isinstance(values,dict)or any(k not in EDITABLE_FIELDS+(LEVEL_FIELDS if i in PROTAGONIST_IDS else ()) for k in values):
+            raise ValueError('Only existing character attributes and skills can be edited.')
         entries=[dict(e)for e in self.character_edits if e['id']!=i or e['field']not in values]
         entries += [dict(id=i,field=k,value=v)for k,v in values.items()]
         self.character_edits=validate_edits(self.rom,entries,self.free_agent_shuffle)
+
+    def restore_character(self,i):
+        """Restore one mate/captain's editable values, even under a shuffle."""
+        from sailors import ATTRIBUTES,MATE_IDS,CAPTAIN_IDS,decode_sailors
+        if type(i)is not int or i not in MATE_IDS+CAPTAIN_IDS:
+            raise ValueError('Choose an existing mate or fleet captain.')
+        original=decode_sailors(self.rom)[i]
+        self.update_character(i,{key:original[key]for key in ATTRIBUTES+('skills',)})
 
     def set_free_agent_shuffle(self,enabled,seed,blind=False,names=False,captain_names=False,mate_stats=False,captain_stats=False,ports=True,name_parts=True,stat_budget=True,mate_skills=False,captain_skills=False):
         from character_mods import validate_shuffle
@@ -274,9 +312,9 @@ class ShipProject:
         self.shipbuilding_shuffle=__import__('shipbuilding_shuffle').default()
 
     def set_goods_shuffle(self,seed,mode='normal',blind=False):
-        from trade_goods import seeded_shuffle,validate_shuffle
-        edits=seeded_shuffle(self.rom,seed,mode,blind)
-        self.goods_edits=edits;self.goods_shuffle=validate_shuffle(dict(seed=seed,mode=mode,blind=blind))
+        from trade_goods import shuffle_plan
+        candidate=shuffle_plan(self,seed,mode,blind)
+        self.goods_edits=candidate['goods_edits'];self.goods_shuffle=candidate['goods_shuffle']
 
     def set_item_shuffle(self,seed,blind=False,include_special=False,special_only=False):
         from item_shops import seeded_shuffle
@@ -307,31 +345,68 @@ class ShipProject:
 
     def manifest(self):
         from portraits import pack,unpack
-        if any(type(v)is not bool for v in (self.item_special_only,self.item_blind,self.item_special,self.custom_items,self.custom_ships,self.custom_economy,self.custom_goods,self.custom_mates,self.custom_captains)):raise ValueError('Invalid custom world setting.')
+        if any(type(v)is not bool for v in (self.item_special_only,self.item_blind,self.item_special,self.custom_items,self.custom_ships,self.custom_economy,self.custom_goods,self.custom_mates,self.custom_captains,self.custom_characters,self.custom_discoveries,self.discovery_easy)):raise ValueError('Invalid custom world setting.')
         embedded=pack(self.portraits);unpack(embedded,len(self.ships))
         from character_mods import validate_edits,validate_shuffle
         from fleet_difficulty import validate_rules
         if self.item_seed is not None:__import__('character_mods').validate_seed(self.item_seed)
-        return dict(character_edits=validate_edits(self.rom,self.character_edits,self.free_agent_shuffle),free_agent_shuffle=validate_shuffle(self.rom,self.free_agent_shuffle),gameplay=dict(fleet_difficulty=self.fleet_difficulty,fleet_rules=validate_rules(self.fleet_rules,self.ships)),portraits=embedded,format='new-horizons-ship-project',version=19,shipbuilding_shuffle=__import__('shipbuilding_shuffle').validate(self.shipbuilding_shuffle),goods_shuffle=__import__('trade_goods').validate_shuffle(self.goods_shuffle),item_special_only=self.item_special_only,item_blind=self.item_blind,item_special=self.item_special,item_seed=self.item_seed,item_edits=__import__('item_shops').validate(self.rom,self.item_edits),custom_items=self.custom_items,custom_ships=self.custom_ships,custom_mates=self.custom_mates,custom_captains=self.custom_captains,custom_goods=self.custom_goods,custom_economy=self.custom_economy,economy_edits=__import__('economy').validate(self.rom,self.economy_edits),goods_edits=__import__('trade_goods').validate(self.rom,self.goods_edits),base_sha256=ROM_SHA,original_availability=self.availability_changes(),fixes=dict(repair_safeguard=self.repair_safeguard,fleet_control=self.fleet_control),
+        return dict(character_edits=validate_edits(self.rom,self.character_edits,self.free_agent_shuffle),free_agent_shuffle=validate_shuffle(self.rom,self.free_agent_shuffle),gameplay=dict(fleet_difficulty=self.fleet_difficulty,fleet_rules=validate_rules(self.fleet_rules,self.ships)),portraits=embedded,library_state=__import__('library_project').state(self),format='new-horizons-ship-project',version=30,item_price_edits=__import__('item_prices').validate(self.rom,self.item_price_edits),discovery_easy=self.discovery_easy,custom_discoveries=self.custom_discoveries,instant_shipbuilding=__import__('instant_shipbuilding').validate(self.instant_shipbuilding),starting_gold=__import__('starting_gold').validate(self.starting_gold),fifty_year_campaign=__import__('campaign_length').validate(self.fifty_year_campaign),discovery_rewrites=__import__('discovery_rewrites').validate(self.discovery_rewrites),ship_descriptions=__import__('ship_descriptions').state(self),shipbuilding_shuffle=__import__('shipbuilding_shuffle').validate(self.shipbuilding_shuffle),goods_shuffle=__import__('trade_goods').validate_shuffle(self.goods_shuffle),item_special_only=self.item_special_only,item_blind=self.item_blind,item_special=self.item_special,item_seed=self.item_seed,item_edits=__import__('item_shops').validate(self.rom,self.item_edits),custom_items=self.custom_items,custom_characters=self.custom_characters,custom_ships=self.custom_ships,custom_mates=self.custom_mates,custom_captains=self.custom_captains,custom_goods=self.custom_goods,custom_economy=self.custom_economy,economy_edits=__import__('economy').validate(self.rom,self.economy_edits),goods_edits=__import__('trade_goods').validate(self.rom,self.goods_edits),base_sha256=ROM_SHA,original_availability=self.availability_changes(),fixes=dict(repair_safeguard=self.repair_safeguard,fleet_control=self.fleet_control),
             edits=[dict(id=c['id'],field=c['field'],value=c['after'])for c in self.changes()],added_ships=copy.deepcopy(self.ships[25:]))
 
     def save_project(self,path):
         path=Path(path).resolve()
         if path.suffix.lower()!='.json':raise ValueError('Save projects as .json files; game and save files cannot be replaced.')
         if path==self.source:raise ValueError('A project cannot replace the source game.')
-        if path.exists():
-            backup=path.with_suffix(path.suffix+'.bak')
-            # Keep the immediately previous project; no game/save is written here.
-            backup.write_bytes(path.read_bytes())
-        path.write_text(json.dumps(self.manifest(),indent=2)+'\n',encoding='utf-8');self.project_path=path
+        from file_safety import atomic_write,stage_bytes
+        manifest=self.manifest()
+        candidate=copy.deepcopy(self)
+        candidate.load_manifest(manifest)
+        payload=(json.dumps(manifest,indent=2)+'\n').encode('utf-8')
+        temporary=stage_bytes(path,payload)
+        try:
+            if path.exists():
+                previous=path.read_bytes()
+                try:
+                    candidate=copy.deepcopy(self)
+                    candidate.load_manifest(json.loads(previous.decode('utf-8-sig')))
+                except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+                    pass  # A damaged current file must not replace the last good backup.
+                else:atomic_write(path.with_suffix(path.suffix+'.bak'),previous)
+            os.replace(temporary,path)
+        finally:temporary.unlink(missing_ok=True)
+        self.project_path=path
 
     def load_project(self,path):
         path=Path(path).resolve();m=json.loads(path.read_text(encoding='utf-8-sig'))
+        self.load_manifest(m)
+        self.project_path=path
+
+    def load_manifest(self,m):
+        """Validate and replace settings without changing ROM or project paths."""
+        m=copy.deepcopy(m)
         if not isinstance(m,dict):raise ValueError('Unsupported project: expected a ship project object.')
-        keys={'format','version','base_sha256','edits'}|({'added_ships'}if m.get('version')in (2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19)else set())|({'fixes'}if m.get('version')in (3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19)else set())|({'original_availability'}if m.get('version')in (4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19) else set())|({'portraits'}if m.get('version')in (6,7,8,9,10,11,12,13,14,15,16,17,18,19) else set())|({'character_edits','free_agent_shuffle'}if m.get('version')in (7,8,9,10,11,12,13,14,15,16,17,18,19) else set())|({'gameplay'}if m.get('version')in (8,9,10,11,12,13,14,15,16,17,18,19) else set())|({'goods_edits'}if m.get('version')in (12,13,14,15,16,17,18,19) else set())|({'economy_edits'}if m.get('version')in (13,14,15,16,17,18,19) else set())|({'custom_economy','custom_goods','custom_mates','custom_captains'}if m.get('version')in (14,15,16,17,18,19) else set())|({'custom_ships'}if m.get('version')in (15,16,17,18,19) else set())|({'custom_items','item_edits'}if m.get('version')in (16,17,18,19) else set())|({'item_seed','item_blind','item_special','item_special_only'}if m.get('version')in (17,18,19) else set())
-        if m.get('version')in (18,19):keys|={'goods_shuffle'}
-        if m.get('version')==19:keys|={'shipbuilding_shuffle'}
-        if set(m)!=keys or m['format']!='new-horizons-ship-project'or type(m['version'])is not int or m['version']not in (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19)or m['base_sha256']!=ROM_SHA or not isinstance(m['edits'],list):
+        keys={'format','version','base_sha256','edits'}|({'added_ships'}if m.get('version')in (2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30)else set())|({'fixes'}if m.get('version')in (3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30)else set())|({'original_availability'}if m.get('version')in (4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'portraits'}if m.get('version')in (6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'character_edits','free_agent_shuffle'}if m.get('version')in (7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'gameplay'}if m.get('version')in (8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'goods_edits'}if m.get('version')in (12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'economy_edits'}if m.get('version')in (13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'custom_economy','custom_goods','custom_mates','custom_captains'}if m.get('version')in (14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'custom_ships'}if m.get('version')in (15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'custom_items','item_edits'}if m.get('version')in (16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())|({'item_seed','item_blind','item_special','item_special_only'}if m.get('version')in (17,18,19,20,21,22,23,24,25,26,27,28,29,30) else set())
+        if m.get('version')in (18,19,20,21,22,23,24,25,26,27,28,29,30):keys|={'goods_shuffle'}
+        if m.get('version')in (19,20,21,22,23,24,25,26,27,28,29,30):keys|={'shipbuilding_shuffle'}
+        if m.get('version')in (20,21,22,23,24,25,26,27,28,29,30):keys|={'library_state'}
+        if m.get('version')in (22,23,24,25,26,27,28,29,30):keys|={'ship_descriptions'}
+        if m.get('version')in (23,24,25,26,27,28,29,30):keys|={'custom_characters'}
+        if m.get('version')in (25,26,27,28,29,30):keys|={'discovery_rewrites'}
+        if m.get('version')in (26,27,28,29,30):keys|={'fifty_year_campaign'}
+        if m.get('version')in (27,28,29,30):keys|={'starting_gold'}
+        if m.get('version')in (28,29,30):keys|={'instant_shipbuilding'}
+        if m.get('version')in (29,30):keys|={'custom_discoveries'}
+        if m.get('version')==30:keys|={'item_price_edits','discovery_easy'}
+        item_price_edits=__import__('item_prices').validate(self.rom,m.get('item_price_edits',[]))
+        discovery_easy=m.get('discovery_easy',False)
+        if type(discovery_easy)is not bool:raise ValueError('Invalid discovery difficulty setting.')
+        custom_discoveries=m.get('custom_discoveries',False)
+        if type(custom_discoveries)is not bool:raise ValueError('Invalid custom discoveries setting.')
+        instant_shipbuilding=__import__('instant_shipbuilding').validate(m.get('instant_shipbuilding',False))
+        starting_gold=__import__('starting_gold').validate(m.get('starting_gold'))
+        fifty_year_campaign=__import__('campaign_length').validate(m.get('fifty_year_campaign',False))
+        discovery_rewrites=__import__('discovery_rewrites').validate(m.get('discovery_rewrites',False))
+        if set(m)!=keys or m['format']!='new-horizons-ship-project'or type(m['version'])is not int or m['version']not in (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30)or m['base_sha256']!=ROM_SHA or not isinstance(m['edits'],list):
             raise ValueError('Unsupported project or ROM revision.')
         from economy import validate as validate_economy,projected
         economy_edits=validate_economy(self.rom,m.get('economy_edits',[]))
@@ -353,9 +428,17 @@ class ShipProject:
             key=(e['id'],e['field'])
             if key in seen:raise ValueError('Duplicate project edit.')
             seen.add(key);rows[e['id']][e['field']]=e['value']
-        for i,row in enumerate(rows):validate(row,self.original[i])
+        library_slots=set()
+        if m.get('version')in (20,21,22,23,24,25,26,27,28,29,30):
+            raw_library=m.get('library_state')
+            if not isinstance(raw_library,dict)or not isinstance(raw_library.get('originals'),list):raise ValueError('Invalid project Library state.')
+            for item in raw_library['originals']:
+                if not isinstance(item,dict)or type(item.get('slot'))is not int:raise ValueError('Invalid Library slot.')
+                library_slots.add(item['slot'])
+        for i,row in enumerate(rows):
+            if i not in library_slots:validate(row,self.original[i])
         added=m.get('added_ships',[])
-        if not isinstance(added,list)or len(added)>5:raise ValueError('Project supports at most five added ships.')
+        if not isinstance(added,list)or len(added)>MAX_ADDED_SHIPS:raise ValueError('Project supports at most ten added ships.')
         for n,s in enumerate(added):
             validate_extra(s,economy_rom,CAPITALS)
             if s['id']!=25+n:raise ValueError('Added ship IDs must be consecutive.')
@@ -382,6 +465,8 @@ class ShipProject:
         goods_edits=validate_goods(self.rom,m.get('goods_edits',[]))
         goods_shuffle=__import__('trade_goods').validate_shuffle(m.get('goods_shuffle',dict(seed=None,mode='normal')))
         from sailors import MATE_IDS,CAPTAIN_IDS
+        custom_characters=m.get('custom_characters',any(e['id']<6 for e in character_edits))
+        if type(custom_characters)is not bool:raise ValueError('Invalid custom character setting.')
         custom_mates=m.get('custom_mates',any(e['id']in MATE_IDS for e in character_edits))
         custom_captains=m.get('custom_captains',any(e['id']in CAPTAIN_IDS for e in character_edits))
         if type(custom_mates)is not bool or type(custom_captains)is not bool:raise ValueError('Invalid custom character setting.')
@@ -403,19 +488,29 @@ class ShipProject:
         shipbuilding_shuffle=__import__('shipbuilding_shuffle').validate(m.get('shipbuilding_shuffle',__import__('shipbuilding_shuffle').default()))
         for offer in shipbuilding_shuffle.get('previous',[]):
             if any(ports(self.rom)[p]['group']>=11 for p in offer['ports']):raise ValueError('Invalid shipyard backup port.')
+        from library_project import read_state
+        identities,bases=read_state(m.get('library_state'),self.rom,rows,portrait_data,fleet_rules)
+        discovery_ids,discovery_entries=__import__('discovery_content').read_state(m.get('library_state',{}).get('discoveries'))
+        ship_descriptions=__import__('ship_descriptions').read_state(m.get('ship_descriptions',[]),len(rows))
+        self.ship_descriptions=ship_descriptions
+        self.item_price_edits=item_price_edits;self.discovery_easy=discovery_easy;self.custom_discoveries=custom_discoveries
+        self.instant_shipbuilding=instant_shipbuilding;self.starting_gold=starting_gold;self.fifty_year_campaign=fifty_year_campaign;self.discovery_rewrites=discovery_rewrites;self.discovery_entries=discovery_entries;self.discovery_identities=discovery_ids
+        self.ship_identities=identities;self.library_bases=bases
         self.shipbuilding_shuffle=shipbuilding_shuffle
         self.goods_shuffle=goods_shuffle
+        self.custom_characters=custom_characters
         self.item_special_only=item_special_only;self.item_blind=item_blind;self.item_special=item_special;self.item_seed=item_seed;self.item_edits=item_edits;self.custom_items=custom_items;self.custom_ships=custom_ships;self.custom_mates=custom_mates;self.custom_captains=custom_captains;self.custom_goods=custom_goods;self.custom_economy=custom_economy;self.economy_edits=economy_edits;self.goods_edits=goods_edits;self.character_edits=character_edits;self.free_agent_shuffle=free_agent_shuffle
         self.portraits=portrait_data
         self.original_availability=offers
-        self.ships=rows;self.repair_safeguard=fixes['repair_safeguard'];self.fleet_control=fleet_control;self.fleet_difficulty=fleet_difficulty;self.fleet_rules=fleet_rules;self.project_path=path
+        self.ships=rows;self.repair_safeguard=fixes['repair_safeguard'];self.fleet_control=fleet_control;self.fleet_difficulty=fleet_difficulty;self.fleet_rules=fleet_rules
 
     def build(self):
-        if any(type(v)is not bool for v in (self.item_special_only,self.item_blind,self.item_special,self.custom_items,self.custom_ships,self.custom_economy,self.custom_goods,self.custom_mates,self.custom_captains)):raise ValueError('Invalid custom world setting.')
+        __import__('library_project').state(self)
+        if any(type(v)is not bool for v in (self.item_special_only,self.item_blind,self.item_special,self.custom_items,self.custom_ships,self.custom_economy,self.custom_goods,self.custom_mates,self.custom_captains,self.custom_characters,self.custom_discoveries,self.discovery_easy)):raise ValueError('Invalid custom world setting.')
         changes=self.changes();offers=self.availability_changes();self.validate_offer_counts()
         from fleet_difficulty import validate_rules
         validate_rules(self.fleet_rules,self.ships)
-        if not self.item_edits and not self.economy_edits and not self.goods_edits and not offers and not changes and len(self.ships)==25 and not self.repair_safeguard and not self.fleet_control and not self.fleet_difficulty and not self.portraits and not self.effective_character_edits() and not self.free_agent_shuffle['enabled']:return self.rom,[]
+        if not self.item_price_edits and not self.discovery_easy and not self.instant_shipbuilding and self.starting_gold is None and not self.fifty_year_campaign and not self.discovery_rewrites and not self.ship_descriptions and not self.discovery_entries and not self.library_bases and not self.item_edits and not self.economy_edits and not self.goods_edits and not offers and not changes and len(self.ships)==25 and not self.repair_safeguard and not self.fleet_control and not self.fleet_difficulty and not self.portraits and not self.effective_character_edits() and not self.free_agent_shuffle['enabled']:return self.rom,[]
         if len(self.ships)>25:
             from expansion import make_fleet
             catalog=ports(self.rom)
@@ -426,18 +521,22 @@ class ShipProject:
                 stock_ports=s['ports'],stock_groups=sorted({catalog[p]['group']for p in s['ports']}))for s in self.ships[25:]]
             compiled,_=make_fleet(self.rom,dict(ships=additions),allow_locked_ports=CAPITALS);data=bytearray(compiled)
         else:data=bytearray(self.rom)
+        from library_project import install_originals
+        install_originals(data,self.rom,self)
         offsets=dict(hull=1,turning=2,power=3,max_crew=4,min_crew=5,max_guns=8,price_gold=10)
         for c in changes:
             i=c['id'];field=c['field'];value=c['after']
             if field=='name':
                 at=MODEL_BASE+i*25;data[at:at+18]=value.encode('ascii').ljust(18,b'\0')
             elif field=='factory_cargo':struct.pack_into('<H',data,MODEL_BASE+i*25+23,value)
+            elif field=='factory_guns':data[MODEL_BASE+i*25+20]=value
+            elif field=='factory_crew':struct.pack_into('<H',data,MODEL_BASE+i*25+21,value)
             elif field=='capacity':struct.pack_into('<H',data,SPEC_BASE+i*12+6,value)
             else:
                 at=SPEC_BASE+i*12+offsets[field]
                 if field=='price_gold':struct.pack_into('<H',data,at,value//10)
                 else:data[at]=value//10 if field=='max_crew'else value
-        if offers:
+        if offers or len(self.ships)>30:
             from availability import install
             install(data,self.rom,self.all_offers())
         if self.repair_safeguard:
@@ -452,8 +551,21 @@ class ShipProject:
             install_difficulty(data,self.ships,self.fleet_rules)
         from portraits import install
         install(data,self.rom,self.portraits,len(self.ships))
+        __import__('discovery_content').install(data,self)
+        __import__('discovery_rewrites').install(data,self)
+        if type(self.discovery_easy)is not bool:raise ValueError('Invalid discovery difficulty setting.')
+        if self.discovery_easy:
+            from discoveries import BASE
+            for slot in range(98):data[BASE+slot*7+5]=10
+        __import__('item_prices').install(data,self)
+        __import__('campaign_length').install(data,self.fifty_year_campaign)
+        __import__('starting_gold').install(data,self.starting_gold)
+        __import__('instant_shipbuilding').install(data,self.instant_shipbuilding)
+        __import__('ship_descriptions').install(data,self)
         from character_mods import apply as apply_characters
         apply_characters(data,self.rom,self.character_edits,self.free_agent_shuffle)
+        from protagonist_mods import install as install_protagonists
+        install_protagonists(data,self.effective_character_edits())
         from trade_goods import install as install_goods
         install_goods(data,self.rom,self.goods_edits)
         from economy import install as install_economy
@@ -472,17 +584,11 @@ class ShipProject:
         if self.source in targets or self.project_path in targets:raise ValueError('Output cannot replace the source game or project.')
         if any(p.exists()for p in targets):raise ValueError('An output file already exists. Choose a new filename to preserve previous versions.')
         rom,changes=self.build();patch=ips(self.rom,rom);assert apply_ips(self.rom,patch)==rom
-        report=dict(shipbuilding_shuffle=(dict(seed=None,blind=True)if __import__('shipbuilding_shuffle').hidden(self)else {k:v for k,v in self.shipbuilding_shuffle.items()if k!='previous'}),goods_shuffle=(dict(seed=None,mode=self.goods_shuffle['mode'],blind=True)if self.goods_shuffle.get('blind',False)else __import__('trade_goods').validate_shuffle(self.goods_shuffle)),item_shuffle=dict(enabled=self.item_seed is not None,blind=self.item_blind,include_special=self.item_special,special_only=self.item_special_only),item_seed=None if self.item_blind else self.item_seed,item_edits=[]if self.item_seed is not None and self.item_blind else copy.deepcopy(self.item_edits),custom_items=self.custom_items,custom_ships=self.custom_ships,custom_mates=self.custom_mates,custom_captains=self.custom_captains,custom_goods=self.custom_goods,custom_economy=self.custom_economy,economy_edits=copy.deepcopy(self.economy_edits),goods_edits=[]if self.goods_shuffle.get('blind',False)else copy.deepcopy(self.goods_edits),gameplay=dict(fleet_difficulty=self.fleet_difficulty,fleet_rules=copy.deepcopy(self.fleet_rules)),character_edits=copy.deepcopy(self.character_edits),free_agent_shuffle=(dict(enabled=True,blind=True,agents=40)if self.free_agent_shuffle['enabled']and (self.free_agent_shuffle['blind']or self.free_agent_shuffle.get('captain_blind',False))else copy.deepcopy(self.free_agent_shuffle)),custom_portraits=[dict(id=i,tiles_sha256=sha(raw))for i,raw in sorted(self.portraits.items())],tool='New Horizons Ship Editor',tool_version=TOOL_VERSION,base_sha256=ROM_SHA,output_sha256=sha(rom),
-            original_availability=[]if __import__('shipbuilding_shuffle').hidden(self)else copy.deepcopy(self.availability_changes()),fixes=dict(repair_safeguard=self.repair_safeguard,fleet_control=self.fleet_control),input_header_removed=bool(self.header),output_headerless=True,changed_fields=changes,added_ships=self.ships[25:],
+        report=dict(item_price_edits=self.item_price_edits,discovery_easy=self.discovery_easy,custom_discoveries_enabled=self.custom_discoveries,ship_descriptions=__import__('ship_descriptions').state(self),custom_discoveries=__import__('discovery_content').state(self),library_ships=[dict(slot=i,identity=identity,name=self.ships[i]['name'])for i,identity in enumerate(self.ship_identities)if not identity.startswith('stock-ship:')or i in self.library_bases],shipbuilding_shuffle=(dict(seed=None,blind=True)if __import__('shipbuilding_shuffle').hidden(self)else {k:v for k,v in self.shipbuilding_shuffle.items()if k!='previous'}),goods_shuffle=(dict(seed=None,mode=self.goods_shuffle['mode'],blind=True)if self.goods_shuffle.get('blind',False)else __import__('trade_goods').validate_shuffle(self.goods_shuffle)),item_shuffle=dict(enabled=self.item_seed is not None,blind=self.item_blind,include_special=self.item_special,special_only=self.item_special_only),item_seed=None if self.item_blind else self.item_seed,item_edits=[]if self.item_seed is not None and self.item_blind else copy.deepcopy(self.item_edits),custom_items=self.custom_items,custom_characters=self.custom_characters,custom_ships=self.custom_ships,custom_mates=self.custom_mates,custom_captains=self.custom_captains,custom_goods=self.custom_goods,custom_economy=self.custom_economy,economy_edits=copy.deepcopy(self.economy_edits),goods_edits=[]if self.goods_shuffle.get('blind',False)else copy.deepcopy(self.goods_edits),gameplay=dict(fleet_difficulty=self.fleet_difficulty,fleet_rules=copy.deepcopy(self.fleet_rules)),character_edits=copy.deepcopy(self.character_edits),free_agent_shuffle=(dict(enabled=True,blind=True,agents=40)if self.free_agent_shuffle['enabled']and (self.free_agent_shuffle['blind']or self.free_agent_shuffle.get('captain_blind',False))else copy.deepcopy(self.free_agent_shuffle)),custom_portraits=[dict(id=i,tiles_sha256=sha(raw))for i,raw in sorted(self.portraits.items())],tool='New Horizons Ship Editor',tool_version=TOOL_VERSION,base_sha256=ROM_SHA,output_sha256=sha(rom),
+            instant_shipbuilding=self.instant_shipbuilding,starting_gold=self.starting_gold,fifty_year_campaign=self.fifty_year_campaign,discovery_rewrites=self.discovery_rewrites,original_availability=[]if __import__('shipbuilding_shuffle').hidden(self)else copy.deepcopy(self.availability_changes()),fixes=dict(repair_safeguard=self.repair_safeguard,fleet_control=self.fleet_control),input_header_removed=bool(self.header),output_headerless=True,changed_fields=changes,added_ships=self.ships[25:],
             ips_base='Original unheadered USA New Horizons ROM',runtime_tested=False,
             note='Data validation and patch reconstruction passed. Edited gameplay balance still needs emulator testing.')
-        path.parent.mkdir(parents=True,exist_ok=True)
-        written=[]
-        try:
-            for target,payload in zip(targets,[rom,patch,(json.dumps(report,indent=2)+'\n').encode()]):
-                with target.open('xb')as stream:stream.write(payload)
-                written.append(target)
-        except Exception:
-            for target in written:target.unlink()
-            raise
+        from file_safety import publish_files
+        publish_files(zip(targets,[rom,patch,(json.dumps(report,indent=2)+'\n').encode('utf-8')]))
         return report
+

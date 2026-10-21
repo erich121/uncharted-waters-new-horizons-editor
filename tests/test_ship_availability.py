@@ -1,4 +1,5 @@
 """Original new-build offers remain independent of stock specs and used ships."""
+from legacy_manifest import legacy_manifest
 import unittest,sys,os,json,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT if (ROOT/'backend.py').exists()else ROOT/'mod_tool'))
@@ -52,10 +53,10 @@ class AvailabilityTests(unittest.TestCase):
     def test_old_schema_and_malformed_config(self):
         with tempfile.TemporaryDirectory()as f:
             path=Path(f)/'test.json'
-            m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m.pop('original_availability');m['version']=3;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['fixes'].pop('fleet_control')
-            path.write_text(json.dumps(m));self.p.load_project(path);self.assertEqual(self.p.availability_changes(),[])
+            m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m.pop('original_availability');m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=3;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None);m['fixes'].pop('fleet_control')
+            path.write_text(json.dumps(legacy_manifest(m)));self.p.load_project(path);self.assertEqual(self.p.availability_changes(),[])
             for raw in ('bad',[dict(id=10,ports=[31],industry=901)],[dict(id=10,ports=[31],industry=900)]*2):
-                m=self.p.manifest();m['original_availability']=raw;path.write_text(json.dumps(m));before=self.p.manifest()
+                m=self.p.manifest();m['original_availability']=raw;path.write_text(json.dumps(legacy_manifest(m)));before=self.p.manifest()
                 with self.assertRaises(ValueError):self.p.load_project(path)
                 self.assertEqual(self.p.manifest(),before)
 if __name__=='__main__':unittest.main()

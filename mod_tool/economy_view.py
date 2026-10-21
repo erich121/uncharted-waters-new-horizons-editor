@@ -8,7 +8,7 @@ class EconomyPanel(ttk.Frame):
   super().__init__(world.detail_panel,style='Surface.TFrame',padding=12)
   self.world=world;self.loading=False;self.timer=None;self.port=0;self.pending=None;self.proposal=None
   self.enabled=tk.BooleanVar(value=False)
-  self.enable_box=ttk.Checkbutton(world.edit_controls,text='Use custom economy',variable=self.enabled,command=self.toggle,state='disabled')
+  self.enable_box=ttk.Checkbutton(world.edit_controls,text='Use custom values',variable=self.enabled,command=self.toggle,state='disabled')
   ttk.Label(self,text='Enable manual editing. Current values still apply when unchecked.',style='Hint.Card.TLabel',wraplength=350).pack(anchor='w',pady=(0,10))
   ttk.Label(self,text='Port economy',style='CardTitle.TLabel').pack(anchor='w',pady=(0,10))
   fields=ttk.Frame(self,style='Card.TFrame');fields.pack(fill='x');self.variables={};self.entries={}
@@ -51,26 +51,33 @@ class EconomyPanel(ttk.Frame):
   for widget in [*self.entries.values(),*self.bulk_entries.values(),self.restore_button,self.restore_region_button]:widget.configure(state='normal'if project.custom_economy else 'disabled')
   self.operation_box.configure(state='readonly'if project.custom_economy else 'disabled')
   row=values(project.rom,project.economy_edits)[port];original=stock(project.rom)[port];self.loading=True
+  draft=self.pending[1]if self.pending and self.pending[0]==port else {}
   for key,var in self.variables.items():
-   var.set(str(row[key]));self.entries[key].configure(style='Changed.TSpinbox'if row[key]!=original[key]else 'TSpinbox')
+   var.set(draft.get(key,str(row[key])));self.entries[key].configure(style='Changed.TSpinbox'if row[key]!=original[key]else 'TSpinbox')
   self.loading=False;self.preview()
  def toggle(self):
   if not self.world.editor.project:return
-  wanted=self.enabled.get();self.flush();self.world.editor.project.custom_economy=wanted;self.world.editor.update_status()
+  wanted=self.enabled.get()
+  if not self.world.commit_edits():self.enabled.set(self.world.editor.project.custom_economy);return
+  self.world.editor.project.custom_economy=wanted;self.world.editor.update_status()
  def schedule(self,*args):
   if self.loading or self.world.view!='Economy'or not self.world.editor.project or not self.world.editor.project.custom_economy:return
   if self.timer is not None:self.world.editor.root.after_cancel(self.timer)
   self.pending=(self.port,{k:v.get()for k,v in self.variables.items()})
   self.timer=self.world.editor.root.after(350,self.flush)
- def cancel(self):
+ def cancel(self,discard=True):
   if self.timer is not None:self.world.editor.root.after_cancel(self.timer);self.timer=None
- def flush(self):
-  if self.timer is None:return
-  self.cancel();port,raw=self.pending;project=self.world.editor.project
-  if not project or not project.custom_economy:return
+  if discard:self.pending=None
+ def flush(self,strict=False):
+  if self.pending is None:return
+  self.cancel(discard=False);port,raw=self.pending;project=self.world.editor.project
+  if not project or not project.custom_economy:self.pending=None;return
   try:edits=update(project.rom,project.economy_edits,port,**{k:int(v)for k,v in raw.items()})
-  except ValueError as error:self.world.editor.status.configure(text='Finish editing: '+str(error));return
-  project.economy_edits=edits;self.world.editor.update_status()
+  except ValueError:
+   error=ValueError('Economy and industry must be whole numbers from 1 to 1000. Correct the entry or use Restore port.')
+   if strict:raise error
+   self.world.editor.status.configure(text='Finish editing: '+str(error));return
+  self.pending=None;project.economy_edits=edits;self.world.editor.update_status()
  def preview(self,*args):
   if not self.world.editor.project:return
   project=self.world.editor.project;ports=self.group();region=self.world.region.get()
@@ -89,7 +96,8 @@ class EconomyPanel(ttk.Frame):
   for p in ports:self.tree.insert('','end',iid=str(p),values=(self.world.port_records[p]['name'],before[p]['economy'],after[p]['economy'],before[p]['industry'],after[p]['industry']),tags=('changed',)if before[p]!=after[p]or before[p]!=stock(project.rom)[p]else ())
  def apply_region(self):
   if not self.world.editor.project or not self.world.editor.project.custom_economy:return
-  self.flush();self.preview()
+  if not self.world.commit_edits():return
+  self.preview()
   if self.proposal is None:return
   self.world.editor.project.economy_edits=self.proposal;self.world.editor.update_status()
  def restore_port(self):

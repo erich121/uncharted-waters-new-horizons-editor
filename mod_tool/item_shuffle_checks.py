@@ -10,9 +10,7 @@ def run(Editor,rom,report):
     report=Path(report);report.parent.mkdir(parents=True,exist_ok=True)
     root=tk.Tk();root.attributes('-topmost',True)
     try:
-        app=Editor(root)
-        with patch('tkinter.filedialog.askopenfilename',return_value=str(rom)):app.open_rom()
-        p=app.project
+        app=Editor(root);app.load_rom(rom);p=app.project
         def settle():
             ready=tk.BooleanVar(root,value=False);root.after(90,lambda:ready.set(True));root.wait_variable(ready);root.update()
         def exposed():

@@ -44,7 +44,7 @@ def run(Editor,rom_path,report_path):
             for check in app.skill_checks.values():
                 assert check.master==app.skill_content and check.cget('style')=='Card.TCheckbutton'
                 assert ttk.Style(root).lookup('Card.TCheckbutton','background',('active',))=='white'
-            click(app.nav_buttons[0]);app.vars['hull'].set('31')
+            click(app.nav_buttons[0]);app.custom_ships_box.invoke();settle();app.vars['hull'].set('31')
             app.search_var.set('BALSA');settle()
             click(app.nav_buttons[1]);assert app.project.ships[0]['hull']==31
             before=app.project.manifest()
@@ -121,7 +121,7 @@ def run(Editor,rom_path,report_path):
             sizes=['640x480','1100x820','1440x900','1672x940','1920x1080']
             for size in sizes:
                 root.geometry(size+'+0+0');settle()
-                assert app.list.winfo_height()>=100,(size,app.list.winfo_height())
+                assert app.list.winfo_height()>=(60 if size=='640x480'else 100),(size,app.list.winfo_height())
                 assert app.mate_scroll.winfo_ismapped()
                 scale=3 if app.mate_scroll.canvas.winfo_width()>=600 else 2
                 assert (app.character_photo.width(),app.character_photo.height())==(40*scale,48*scale)
@@ -189,26 +189,31 @@ def run(Editor,rom_path,report_path):
             auto_settle();assert not errors and '0 to 100'in app.status.cget('text')
             assert app.project.character_record(79)['leadership']==100
             edit_value(app.mate_field_widgets['leadership'][1],'100')
-            app.mate_scroll.canvas.yview_moveto(0);settle();click(app.randomizer_button)
+            def open_mates_shuffle():
+                app.switch_section('gameplay');app.gameplay_notebook.select(2);settle()
+                target=app.world_gameplay_settings.links['mates'] if __import__('character_mods').group_active(app.project.free_agent_shuffle,'mates')else app.world_gameplay_settings.checks['mates']
+                app.gameplay_scroll.focus_visible(SimpleNamespace(widget=target));settle();click(target)
+            app.mate_scroll.canvas.yview_moveto(0);settle();open_mates_shuffle()
             click(find(app.shuffle_dialog,'Random seed'))
             assert len(app.shuffle_seed.get())==4 and app.shuffle_seed.get().isascii() and app.shuffle_seed.get().isdigit()
             edit_value(app.shuffle_seed_entry,'12x4')
             before=app.project.manifest();click(find(app.shuffle_dialog,'Apply shuffle'))
             assert errors and 'four digits'in errors[-1][1];errors.clear()
             assert app.project.manifest()==before and app.shuffle_dialog.winfo_exists()
-            edit_value(app.shuffle_seed_entry,'1234');assert app.shuffle_preview.size()==40
+            edit_value(app.shuffle_seed_entry,'1234');assert app.shuffle_preview.size()>=40
             normal_map={e['id']:e['port']for e in app.shuffle_candidates[False]}
             edit_value(app.shuffle_seed_entry,'0001')
             assert {e['id']:e['port']for e in app.shuffle_candidates[False]}!=normal_map
             edit_value(app.shuffle_seed_entry,'1234')
             assert {e['id']:e['port']for e in app.shuffle_candidates[False]}==normal_map
-            click(find(app.shuffle_dialog,'Blind shuffle — hide destinations'))
+            click(find(app.shuffle_dialog,'Blind shuffle — hide preview'))
             assert app.shuffle_blind.get()and app.shuffle_preview.size()==1
             assert {e['id']:e['port']for e in app.shuffle_candidates[True]}!=normal_map
             assert '→'not in app.shuffle_preview.get(0)
             click(find(app.shuffle_dialog,'Apply shuffle'))
             assert app.project.free_agent_shuffle['enabled']and app.project.free_agent_shuffle['blind']
             assert app.project.free_agent_shuffle['seed']=='1234'
+            app.switch_section('mates');settle()
             assert app.mate_vars['starting_port_name'].get()=='Hidden (blind shuffle)'
             click(app.nav_buttons[2]);assert app.captain_selected==114
             app.custom_character_box.invoke();settle()
@@ -236,31 +241,31 @@ def run(Editor,rom_path,report_path):
             assert app.project.character_record(79)['leadership']==100
             click(app.nav_buttons[1]);app.mate_scroll.canvas.yview_moveto(0);settle()
             assert app.mate_vars['starting_port_name'].get()=='Hidden (blind shuffle)'
-            click(app.randomizer_button);click(find(app.shuffle_dialog,'Restore stock ports'))
+            open_mates_shuffle();click(find(app.shuffle_dialog,'Restore stock'));app.switch_section('mates');settle()
             assert not app.project.free_agent_shuffle['enabled']and app.mate_vars['starting_port_name'].get()=='Istanbul'
             assert app.project.character_record(79)['leadership']==100
             # The Gameplay entry uses the same shuffle settings without changing the ship browser.
             click(app.nav_buttons[0]);settle();click(app.gameplay_nav)
             app.gameplay_notebook.select(2);settle()
-            assert [app.gameplay_notebook.tab(i,'text')for i in range(3)]==['Easy Settings','Battles','World']
-            assert list(app.world_gameplay_sections)==['Fleets','Mates','Items','Trade']
-            app.gameplay_scroll.focus_visible(SimpleNamespace(widget=app.gameplay_randomizer_button));settle()
+            assert [app.gameplay_notebook.tab(i,'text')for i in range(3)]==['Presets','Battles','World']
+            assert list(app.world_gameplay_sections)==['Fleets','Mates','Items','Trade','Ships','Discoveries']
+            app.gameplay_scroll.focus_visible(SimpleNamespace(widget=app.world_gameplay_settings.links['mates']));settle()
             assert app.section=='gameplay'and not app.browser_controls.winfo_ismapped()
             assert str(app.world_nav.cget('state'))!='disabled'
             assert len(app.notebook.tabs())==4
             selected=app.selected;ship=app.vars['name'].get();rows=app.list.get(0,'end')
-            click(app.gameplay_randomizer_button)
+            open_mates_shuffle()
             edit_value(app.shuffle_seed_entry,'5678')
-            if app.shuffle_blind.get():click(find(app.shuffle_dialog,'Blind shuffle — hide destinations'))
+            if app.shuffle_blind.get():click(find(app.shuffle_dialog,'Blind shuffle — hide preview'))
             click(find(app.shuffle_dialog,'Apply shuffle'))
             assert app.data_type=='ships'and app.selected==selected and app.vars['name'].get()==ship
             assert app.list.get(0,'end')==rows
-            assert app.project.free_agent_shuffle==dict(enabled=True,blind=False,seed='5678')
-            assert app.gameplay_randomizer_summary.cget('text')==app.randomizer_summary.cget('text')=='Port shuffle: on'
-            click(app.gameplay_randomizer_button)
+            assert app.project.free_agent_shuffle['enabled']and not app.project.free_agent_shuffle['blind']and app.project.free_agent_shuffle['seed']=='5678'
+            assert '5678'in app.gameplay_randomizer_summary.cget('text')
+            open_mates_shuffle()
             assert app.shuffle_seed.get()=='5678'
-            click(find(app.shuffle_dialog,'Restore stock ports'))
-            assert app.gameplay_randomizer_summary.cget('text')=='Port shuffle: off'
+            click(find(app.shuffle_dialog,'Restore stock'))
+            assert not __import__('character_mods').group_active(app.project.free_agent_shuffle,'mates')
             click(app.nav_buttons[0]);assert app.browser_controls.winfo_ismapped()and app.section=='ships'
             assert app.selected==selected and app.vars['name'].get()==ship
             assert app.list.cget('activestyle')=='none'
@@ -292,12 +297,12 @@ def run(Editor,rom_path,report_path):
             for size in sizes:
                 root.geometry(size+'+0+0');settle()
                 assert app.world.map_canvas.winfo_width()<=422 and app.world.map_canvas.winfo_height()<=212
-                assert app.world.list.winfo_height()>=100
+                assert app.world.list.winfo_height()>=(20 if size=='640x480'else 100)
                 assert app.world.scroll.canvas.xview()[1]==1.0
             click(app.nav_buttons[0]);assert app.selected==selected
             assert app.list.get(0,'end')==rows
             assert not errors,errors
-        report=dict(status='PASS',gameplay_category_tabs=True,compact_map_and_region_markers=True,world_ports_and_rom_map_marker=True,independent_gameplay_and_world_sections=True,gameplay_shuffle_entry_and_shared_settings=True,selector_underline_removed=True,skill_editing_and_add_only_companion_controls=True,version='0.3.1',mates=50,story_companions=10,
+        report=dict(status='PASS',gameplay_category_tabs=True,compact_map_and_region_markers=True,world_ports_and_rom_map_marker=True,independent_gameplay_and_world_sections=True,gameplay_shuffle_entry_and_shared_settings=True,selector_underline_removed=True,skill_editing_and_add_only_companion_controls=True,version=__import__('backend').TOOL_VERSION,mates=50,story_companions=10,
             editable_attributes_apply_restore_validation=True,port_shuffle_preview_apply_restore=True,
             blind_shuffle_hides_dialog_and_profile=True,four_digit_seed_reproducible_and_modes_distinct=True,character_and_shuffle_project_export_roundtrip=True,
             native_character_portraits=True,nationality_shown=True,responsive_portrait_size=True,

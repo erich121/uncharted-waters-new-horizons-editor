@@ -41,6 +41,10 @@ def run(Editor,rom,report):
             assert next(s for s in sources if s['port']==4)['economy_required']==600
             assert next(s for s in sources if s['port']==48)['economy_required']==200
             world.goods_gate_box.delete(0,'end');world.goods_gate_box.insert(0,'300');settle(450)
+            world.goods_gate.set('301');settle(450)
+            with patch('tkinter.filedialog.asksaveasfilename')as picker:app.export()
+            picker.assert_not_called();assert errors and world.goods_gate.get()=='301';errors.clear()
+            world.goods_gate.set('300');settle(450)
             path=Path(directory)/'goods.json';app.project.save_project(path)
             other=ShipProject(rom);other.load_project(path);assert other.goods_edits==app.project.goods_edits
             output=Path(directory)/'goods.sfc';other.export(output)
@@ -59,7 +63,7 @@ def run(Editor,rom,report):
             app.switch_section('world');mode('Goods');world.selected=10;world.details();settle()
             assert not app.project.goods_edits and len(world.good_sources())==3
             assert not errors,errors
-        report.write_text(json.dumps(dict(status='PASS',sugar_port_add_remove=True,automatic_economy_changes=True,port_information_read_only_and_updates=True,edited_row_and_section_markers=True,pending_edit_stays_with_its_original_port=True,restore_good=True,full_port_rejected_without_replacement=True,project_roundtrip_and_rom_ips=True),indent=2),encoding='utf-8')
+        report.write_text(json.dumps(dict(status='PASS',invalid_drafts_preserved_and_block_export=True,sugar_port_add_remove=True,automatic_economy_changes=True,port_information_read_only_and_updates=True,edited_row_and_section_markers=True,pending_edit_stays_with_its_original_port=True,restore_good=True,full_port_rejected_without_replacement=True,project_roundtrip_and_rom_ips=True),indent=2),encoding='utf-8')
     except Exception as error:
         report.write_text(json.dumps(dict(status='FAIL',error=repr(error)),indent=2),encoding='utf-8');raise
     finally:root.destroy()

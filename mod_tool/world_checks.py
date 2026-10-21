@@ -123,11 +123,14 @@ def run(Editor,rom_path,report_path):
                     choose_mode(mode);settle()
                     assert world.scroll.canvas.xview()[1]==1.0,(size,mode,'horizontal scroll')
                     assert world.columns.winfo_width()<=world.scroll.canvas.winfo_width()-20,(size,mode,world.columns.winfo_width(),world.scroll.canvas.winfo_width())
-                    assert world.map_canvas.winfo_width()<=422 and world.map_canvas.winfo_height()<=212
+                    if mode=='Discoveries':
+                        assert world.detail_panel.winfo_rooty()>world.map_canvas.winfo_rooty()+world.map_canvas.winfo_height()
+                        assert world.map_canvas.winfo_width()<=902
+                    else:assert world.map_canvas.winfo_width()<=422 and world.map_canvas.winfo_height()<=212
                     assert world.list.winfo_height()>=100
                     position=(world.map_canvas.winfo_rootx(),world.map_canvas.winfo_rooty(),world.map_canvas.winfo_width(),world.map_canvas.winfo_height())
                     if map_position is None:map_position=position
-                    else:assert position==map_position,(size,mode,'map jumped',position,map_position)
+                    elif mode!='Discoveries':assert position==map_position,(size,mode,'map jumped',position,map_position)
                     if mode=='Ports'and world.port_dashboard:
                         for port_id in range(100):
                             world.selected=port_id;world.details();root.update_idletasks()
@@ -156,7 +159,7 @@ def run(Editor,rom_path,report_path):
                             assert canvas.yview()[1]<.9999,(size,'wheel up locked')
                         canvas.yview_moveto(0);settle()
                     else:assert not world.port_goods.winfo_ismapped()and not world.port_ships.winfo_ismapped()
-                    if int(size.split('x')[0])>=1440:
+                    if int(size.split('x')[0])>=1440 and mode!='Discoveries':
                         assert world.detail_panel.winfo_x()>world.map_panel.winfo_x()+world.map_panel.winfo_width()
             assert app.project.manifest()==before and not errors,(errors,'browsing modified project')
             assert app.project.build()[0]==ShipProject(rom_path).build()[0]

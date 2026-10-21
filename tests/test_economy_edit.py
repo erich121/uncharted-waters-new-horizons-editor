@@ -1,4 +1,5 @@
 import sys,unittest,tempfile,json
+from legacy_manifest import legacy_manifest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'mod_tool'))
 from backend import ShipProject,apply_ips
@@ -31,10 +32,10 @@ class EconomyTests(unittest.TestCase):
   self.p.economy_edits=update(self.p.rom,[],0,economy=900)
   with tempfile.TemporaryDirectory()as d:
    path=Path(d)/'project.json';self.p.save_project(path);q=ShipProject(self.p.source);q.load_project(path);self.assertEqual(q.economy_edits,self.p.economy_edits)
-   m=self.p.manifest();m['economy_edits'][0]['industry']=1001;path.write_text(json.dumps(m));before=q.manifest()
+   m=self.p.manifest();m['economy_edits'][0]['industry']=1001;path.write_text(json.dumps(legacy_manifest(m)));before=q.manifest()
    with self.assertRaises(ValueError):q.load_project(path)
    self.assertEqual(q.manifest(),before)
-   m=self.p.manifest();m['version']=12;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits');path.write_text(json.dumps(m));q.load_project(path);self.assertEqual(q.economy_edits,[])
+   m=self.p.manifest();m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=12;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits');path.write_text(json.dumps(legacy_manifest(m)));q.load_project(path);self.assertEqual(q.economy_edits,[])
  def test_compose_with_ships_goods_and_edited_capital(self):
   from trade_goods import change
   self.p.economy_edits=update(self.p.rom,[],0,economy=900,industry=1000)

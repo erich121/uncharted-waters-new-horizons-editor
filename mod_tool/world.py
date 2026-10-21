@@ -93,7 +93,7 @@ class WorldBrowser:
         self.heading=ttk.Label(page,text='World',font=('Segoe UI',18,'bold'));self.heading.pack(anchor='w',pady=(0,4))
         self.intro=tk.Label(page,text='Starting values from the original ROM • Read-only',foreground='#6e7f98',background='#f5f7fb',font=('Segoe UI',10),height=2,anchor='nw',justify='left',wraplength=300);self.intro.pack(anchor='w',pady=(0,2))
         self.edit_controls=ttk.Frame(page,height=30);self.edit_controls.pack(fill='x');self.edit_controls.pack_propagate(False)
-        self.columns=ttk.Frame(page);self.columns.pack(anchor='w')
+        self.columns=ttk.Frame(page);self.columns.pack(anchor='center',fill='x')
         self.map_panel=ttk.Frame(self.columns);self.detail_panel=ttk.Frame(self.columns)
         self.map_panel.grid(row=0,column=0,sticky='new');self.detail_panel.grid(row=0,column=1,sticky='new',padx=(20,0))
         self.layout_key=None
@@ -102,6 +102,7 @@ class WorldBrowser:
         region_bar=ttk.Frame(self.map_toolbar);self.region_bar=region_bar;region_bar.pack(anchor='w',pady=(0,10))
         ttk.Label(region_bar,text='Region').pack(anchor='w')
         self.region=tk.StringVar(value='All regions')
+        self.last_region='All regions'
         self.region_box=ttk.Combobox(region_bar,textvariable=self.region,values=['All regions'],state='readonly',width=23)
         self.region_box.pack(anchor='w',pady=(4,0));self.region_box.bind('<<ComboboxSelected>>',self.change_region)
         self.map_caption=tk.Label(self.map_panel,text='ROM world map',font=('Segoe UI',11,'bold'),height=2,wraplength=300,anchor='w',justify='left',background='#f5f7fb',foreground='#17243d');self.map_caption.pack(anchor='w',pady=(0,6))
@@ -127,7 +128,7 @@ class WorldBrowser:
         discovery_header=ttk.Frame(self.discovery_card,style='CardHeader.TFrame',padding=8);discovery_header.pack(fill='x')
         ttk.Label(discovery_header,text='Discovery information',style='CardTitle.TLabel').pack(anchor='w')
         discovery_body=ttk.Frame(self.discovery_card,style='Card.TFrame',padding=12);discovery_body.pack(fill='x')
-        self.discovery_picture=ttk.Label(discovery_body,style='Card.TLabel');self.discovery_picture.pack(anchor='w',pady=(0,8))
+        self.discovery_picture=ttk.Label(discovery_body,style='Card.TLabel');self.discovery_picture.pack(side='left',anchor='n',padx=(0,16),pady=(0,8))
         self.discovery_photo=None;self.discovery_picture_key=None
         self.discovery_summary=ttk.Label(discovery_body,style='Card.TLabel',wraplength=260);self.discovery_summary.pack(anchor='w',pady=(0,8))
         self.discovery_description=ttk.Label(discovery_body,style='Card.TLabel',wraplength=260);self.discovery_description.pack(anchor='w',pady=(0,8))
@@ -141,7 +142,9 @@ class WorldBrowser:
         self.goods_title=ttk.Label(goods_header,text='Selling ports',style='CardTitle.TLabel');self.goods_title.pack(anchor='w')
         goods_body=ttk.Frame(self.goods_card,style='Card.TFrame',padding=12);goods_body.pack(fill='both',expand=True)
         self.goods_summary=ttk.Label(goods_body,style='Card.TLabel',wraplength=300);self.goods_summary.pack(anchor='w',pady=(0,8))
-        self.item_picture=ttk.Label(goods_body,style='Card.TLabel');self.item_photo=None;self.item_picture_key=None
+        self.item_profile=ttk.Frame(goods_body,style='Card.TFrame')
+        self.item_meta=ttk.Label(self.item_profile,style='Card.TLabel',justify='left');self.item_meta.pack(side='left',padx=12)
+        self.item_picture=ttk.Label(self.item_profile,style='Card.TLabel');self.item_photo=None;self.item_picture_key=None
         self.item_description=ttk.Label(goods_body,style='Hint.Card.TLabel',wraplength=300);self.item_description.pack(anchor='w',pady=(0,8))
         sellers=ttk.Frame(goods_body,style='Card.TFrame');sellers.pack(fill='both',expand=True)
         self.goods_tree=ttk.Treeview(sellers,columns=('port','economy','start'),show='headings',height=8,selectmode='browse')
@@ -152,9 +155,9 @@ class WorldBrowser:
         self.goods_tree.bind('<<TreeviewSelect>>',self.pick_selling_port)
         self.goods_tree.tag_configure('changed',foreground='#ef7800',background='#fff5e9')
         self.custom_goods_var=tk.BooleanVar(value=False)
-        self.goods_enable_box=ttk.Checkbutton(self.edit_controls,text='Use custom goods',variable=self.custom_goods_var,command=self.toggle_custom_goods,state='disabled')
+        self.goods_enable_box=ttk.Checkbutton(self.edit_controls,text='Use custom values',variable=self.custom_goods_var,command=self.toggle_custom_goods,state='disabled')
         self.goods_edit_frame=ttk.Frame(goods_body,style='Card.TFrame',padding=(0,10))
-        self.goods_edit_loading=False;self.goods_edit_timer=None;self.goods_signature=None
+        self.goods_edit_loading=False;self.goods_edit_timer=None;self.goods_pending=None;self.goods_signature=None
         self.goods_port=tk.StringVar();self.goods_gate=tk.StringVar(value='0')
         ttk.Label(self.goods_edit_frame,text='Port',style='Card.TLabel').grid(row=0,column=0,sticky='w')
         self.goods_port_box=ttk.Combobox(self.goods_edit_frame,textvariable=self.goods_port,state='readonly',width=23)
@@ -179,29 +182,63 @@ class WorldBrowser:
         self.item_editor=ItemShopPanel(self,goods_body)
         self.edit_controls.configure(height=max(w.winfo_reqheight()for w in (self.goods_enable_box,self.economy_panel.enable_box,self.item_editor.enable_box))+2)
         self.scroll.canvas.bind('<Configure>',lambda event:self.wrap(event.width),add='+')
+        self.scroll.content.bind('<Configure>',lambda event:self.schedule_discovery_fit(),add='+')
     def wrap(self,width):
         available=max(260,width-32);dashboard=self.view=='Ports'and available>=960
-        wide=available>=820
-        bounded=min(1450,available)if dashboard else min(1100,available)if wide else min(520,available)
-        map_width=300 if available>=960 else 420 if wide else min(420,bounded)
+        discovery=self.view=='Discoveries'
+        wide=available>=820 and not discovery
+        bounded=min(900,available)if discovery else min(1450,available)if dashboard else min(1100,available)if wide else min(520,available)
+        map_width=min(bounded,640)if discovery else 300 if available>=960 else 420 if wide else min(420,bounded)
         detail_width=bounded-map_width-20 if wide else bounded
-        key=(bounded,wide,dashboard)
-        if key!=self.layout_key:
+        self.map_toolbar.configure(height=1 if discovery else 70)
+        self.map_caption.configure(height=1 if discovery else 2)
+        self.intro.configure(height=1 if discovery else 2)
+        self.edit_controls.configure(height=1 if discovery else max(w.winfo_reqheight()for w in (self.goods_enable_box,self.economy_panel.enable_box,self.item_editor.enable_box))+2)
+        key=(bounded,wide,dashboard,self.view)
+        changed_layout=key!=self.layout_key
+        if changed_layout:
             self.layout_key=key;self.port_dashboard=dashboard
+            self.columns.grid_anchor('n'if discovery else 'nw')
             self.columns.columnconfigure(0,minsize=map_width if wide else bounded)
             self.columns.columnconfigure(1,minsize=detail_width if wide else 0)
             self.detail_panel.grid_forget()
             self.detail_panel.grid(row=0 if wide else 1,column=1 if wide else 0,sticky='new',padx=(20,0)if wide else 0,pady=(0,0)if wide else (12,0))
             self.layout_port_lists()
+        self.map_canvas.pack_configure(anchor='center'if discovery else 'w')
+        self.map_caption.pack_configure(anchor='center'if discovery else 'w')
+        self.schedule_discovery_fit()
         self.map_caption.configure(wraplength=map_width)
         self.intro.configure(wraplength=bounded)
-        self.map_canvas.configure(width=max(200,map_width-2))
-        text_width=max(180,detail_width-48)
+        if not discovery or changed_layout:self.map_canvas.configure(width=max(200,map_width-2))
+        text_width=max(180,detail_width-48-(144 if discovery else 0))
         for label in (self.discovery_summary,self.discovery_description,self.discovery_requirement,self.goods_summary,self.item_description):label.configure(wraplength=text_width)
         if hasattr(self,'economy_panel'):
             for label in self.economy_panel.winfo_children():
                 if label.winfo_class()=='TLabel':label.configure(wraplength=max(180,text_width-24))
         self.note.configure(wraplength=max(200,detail_width));self.ships.configure(wraplength=max(200,detail_width))
+
+    def schedule_discovery_fit(self):
+        if self.view!='Discoveries':return
+        if getattr(self,'discovery_fit_timer',None) is not None:self.editor.root.after_cancel(self.discovery_fit_timer)
+        self.discovery_fit_timer=self.editor.root.after(30,self.fit_discovery)
+
+    def fit_discovery(self):
+        self.discovery_fit_timer=None
+        if self.view!='Discoveries' or not self.settings.winfo_ismapped():return
+        canvas=self.map_canvas
+        if (canvas.winfo_height()!=canvas.winfo_reqheight() or
+                self.scroll.content.winfo_height()!=self.scroll.content.winfo_reqheight()):
+            self.schedule_discovery_fit()
+            return
+        # Requested canvas height changes before its parents have propagated
+        # their new requests. Mixing those values makes the map oscillate.
+        # Measure both from the same completed geometry pass instead.
+        other=max(0,self.scroll.content.winfo_height()-canvas.winfo_height())
+        height=max(80,min(450,self.scroll.canvas.winfo_height()-other-16))
+        width=max(160,min(900,self.scroll.canvas.winfo_width()-34,height*2-2))
+        if abs(int(canvas.cget('width'))-width)>2:
+            canvas.configure(width=width)
+            self.schedule_discovery_fit()
 
     def layout_port_lists(self):
         for widget in (self.port_goods,self.port_ships,self.port_items):widget.grid_forget()
@@ -224,7 +261,7 @@ class WorldBrowser:
         if project and self.rom is not project.rom:
             self.rom=project.rom;self.port_records=catalogue(project.rom);self.stock_port_records=[dict(row)for row in self.port_records]
             from discoveries import catalogue as discovery_catalogue
-            self.discovery_records=discovery_catalogue(project.rom)
+            self.discovery_records=__import__('discovery_content').rows(project)
             from goods import catalogue as goods_catalogue
             self.goods_records=goods_catalogue(project.rom);self.stock_goods_records=self.goods_records
             from items import catalogue as item_catalogue
@@ -232,13 +269,15 @@ class WorldBrowser:
             self.records=self.record_sets()[self.view]
             self.region_box.configure(values=['All regions']+region_names(project.rom)+['Supply ports']);self.filter();self.map_image=overview(decode_grid(project.rom));self.map_scaled_size=None
         if project:
-            signature=(id(project),repr(project.goods_edits),repr(project.goods_shuffle),repr(project.economy_edits),project.custom_economy,project.custom_goods,repr(project.item_edits))
+            signature=(id(project),repr(project.goods_edits),repr(project.goods_shuffle),repr(project.economy_edits),project.custom_economy,project.custom_goods,repr(project.item_edits),repr(project.discovery_entries),project.discovery_rewrites,project.discovery_easy,repr(project.item_price_edits))
             if signature!=self.goods_signature:
                 from item_shops import catalogue as edited_items
                 self.item_records=edited_items(project.rom,project.item_edits)
                 from items import catalogue as stock_items
                 self.stock_item_records=stock_items(project.rom)
-                self.changed_items={r['id']for r,original in zip(self.item_records,self.stock_item_records)if r['sources']!=original['sources']}
+                from item_prices import price
+                for row in self.item_records:row['price_gold']=price(project,row['id'])
+                self.changed_items={r['id']for r,original in zip(self.item_records,self.stock_item_records)if r['sources']!=original['sources']or r['price_gold']!=original['price_gold']}
                 from trade_goods import catalogue as edited_catalogue,offers
                 self.goods_draft_records=edited_catalogue(project.economy_rom(),project.goods_edits)
                 self.goods_records=edited_catalogue(project.economy_rom(),project.goods_edits)
@@ -253,24 +292,29 @@ class WorldBrowser:
                     self.port_records[port]['specialty']=names[specialty['good']]if specialty else 'None'
                 self.changed_goods={g['id']for g,stock in zip(self.goods_records,self.stock_goods_records)if g['sources']!=stock['sources']}
                 self.goods_signature=signature;self.records=self.record_sets()[self.view];self.filter()
-        self.intro.configure(text='Project item shops • Selling ports and offer times'if self.view=='Items'else 'Edit starting goods economy and shipbuilding industry • Single port or whole region'if self.view=='Economy'else 'Project goods availability • Edit selling ports and economy requirements'if self.view=='Goods'else 'Current project overview • Read-only'if self.view=='Ports'else 'Starting values from the original ROM • Read-only')
+        self.intro.configure(text='Project item shops • Selling ports and offer times'if self.view=='Items'else 'Edit starting goods economy and shipbuilding industry • Single port or whole region'if self.view=='Economy'else 'Project goods availability • Edit selling ports and economy requirements'if self.view=='Goods'else 'Current project overview • Read-only'if self.view=='Ports'else 'Current project discovery pool • Edit content in the Discoveries section')
         self.details()
     def filter(self):
         self.list.delete(0,'end');self.rows=[]
+        discovery_changes=__import__('discovery_content').changed_slots(self.editor.project)if self.view=='Discoveries'and self.editor.project else set()
         for row in self.records:
             if (self.view not in ('Ports','Economy')or self.region.get()=='All regions'or row['region']==self.region.get())and self.search.get().strip().casefold()in row['name'].casefold():
-                self.rows.append(row['id']);changed=(self.view=='Items'and row['id']in getattr(self,'changed_items',set()))or(self.view=='Goods'and row['id']in getattr(self,'changed_goods',set()))or(self.view in ('Ports','Economy')and row['id']in getattr(self,'changed_economies',set()))
+                self.rows.append(row['id']);changed=(self.view=='Discoveries'and row['id']in discovery_changes)or(self.view=='Items'and row['id']in getattr(self,'changed_items',set()))or(self.view=='Goods'and row['id']in getattr(self,'changed_goods',set()))or(self.view in ('Ports','Economy')and row['id']in getattr(self,'changed_economies',set()))
                 self.list.insert('end',f"{row['id']+1:03d}  {row['name']}"+('  *'if changed else ''))
                 if changed:self.list.itemconfigure('end',foreground='#ef7800',background='#fff5e9',selectforeground='#ef7800',selectbackground='#ffe2c0')
         if self.selected in self.rows:
             index=self.rows.index(self.selected);self.list.selection_set(index);self.list.activate(index);self.list.selection_anchor(index)
-    def record_sets(self):return {'Economy':self.port_records[:100],'Ports':self.port_records,'Discoveries':self.discovery_records,'Goods':getattr(self,'goods_draft_records',self.goods_records),'Items':self.item_records}
+    def record_sets(self):
+        if self.editor.project:self.discovery_records=__import__('discovery_content').rows(self.editor.project)
+        return {'Economy':self.port_records[:100],'Ports':self.port_records,'Discoveries':self.discovery_records,'Goods':getattr(self,'goods_draft_records',self.goods_records),'Items':self.item_records}
 
     def change_mode(self,event=None):
         self.selections[self.view]=self.selected;self.searches[self.view]=self.search.get()
-        self.flush_goods_gate();self.economy_panel.flush()
+        if not self.commit_edits():
+            self.mode.set('Port Information'if self.view=='Ports'else self.view);return
         self.view='Ports'if self.mode.get()=='Port Information'else self.mode.get();self.records=self.record_sets()[self.view];self.good_port_selected=None
         if self.view=='Economy'and self.region.get()=='Supply ports':self.region.set('All regions')
+        self.last_region=self.region.get()
         if self.editor.project:self.region_box.configure(values=['All regions']+region_names(self.editor.project.rom)+(['Supply ports']if self.view=='Ports'else []))
         self.selected=self.selections[self.view];self.search.set(self.searches[self.view]);self.filter()
         self.goods_enable_box.pack_forget();self.economy_panel.enable_box.pack_forget();self.item_editor.enable_box.pack_forget()
@@ -281,7 +325,7 @@ class WorldBrowser:
             self.region_bar.pack(anchor='w',pady=(0,10));self.port_card.pack(anchor='w',fill='x')
             if self.view=='Economy':self.economy_panel.pack(before=self.note,fill='both',expand=True)
         elif self.view=='Discoveries':
-            self.map_scope.configure(text='Selected discovery');self.map_scope.pack(anchor='w',pady=8)
+            self.map_scope.configure(text='Selected discovery')
             self.discovery_card.pack(before=self.note,anchor='w',fill='x')
         else:
             if self.view=='Goods':self.goods_controls.pack(anchor='w',pady=8)
@@ -291,7 +335,8 @@ class WorldBrowser:
         self.wrap(self.scroll.canvas.winfo_width());self.details();self.scroll.canvas.yview_moveto(0);self.editor.update_status()
 
     def change_region(self,event=None):
-        self.economy_panel.flush()
+        if not self.commit_edits():self.region.set(self.last_region);return
+        self.last_region=self.region.get()
         self.search.set('');self.filter()
         if self.rows and self.selected not in self.rows:
             self.selected=self.rows[0];self.filter()
@@ -301,7 +346,7 @@ class WorldBrowser:
         selection=self.list.curselection()
         if not selection:return
         selected=self.rows[selection[0]]
-        self.flush_goods_gate();self.economy_panel.flush()
+        if not self.commit_edits():self.filter();return
         self.selected=selected;self.good_port_selected=None
         if selected in self.rows:
             index=self.rows.index(selected);self.list.selection_clear(0,'end');self.list.selection_set(index);self.list.activate(index);self.list.selection_anchor(index)
@@ -313,13 +358,13 @@ class WorldBrowser:
             self.refresh_goods();return
         if self.view=='Discoveries':
             from discoveries import picture
-            key=(id(self.rom),row['id'])
+            key=(id(self.rom),row['id'],repr(self.editor.project.discovery_entries.get(row['id'])))
             if key!=self.discovery_picture_key:
-                self.discovery_photo=ImageTk.PhotoImage(picture(self.rom,row['id']),master=self.discovery_picture);self.discovery_picture.configure(image=self.discovery_photo);self.discovery_picture_key=key
+                self.discovery_photo=ImageTk.PhotoImage(__import__('discovery_content').picture(self.editor.project.discovery_entries[row['id']])if row['id']in self.editor.project.discovery_entries else picture(self.rom,row['id']),master=self.discovery_picture);self.discovery_picture.configure(image=self.discovery_photo);self.discovery_picture_key=key
             self.discovery_summary.configure(text=row['category']+' • Difficulty: '+str(row['difficulty'])+'\nRequired discovery score: '+str(row['required_score'])+' or higher')
             self.discovery_description.configure(text=row['description'])
-            self.note.configure(text='Discovery catalogue from the original ROM. Availability varies between games; this does not show which discoveries are enabled or already found in your save.')
-            self.ships.configure(text='');return
+            self.note.configure(text='Current project discovery pool. Availability varies between games; this does not show which discoveries are enabled or already found in your save.')
+            self.ships.configure(text='');self.schedule_discovery_fit();return
         for key,value in self.values.items():value.set(('Yes'if row['capital']else 'No')if key=='capital'and 'capital'in row else str(row.get(key,'Not applicable')))
         if self.goods_hidden():self.values['specialty'].set('Hidden by blind shuffle')
         for key,widget in self.value_labels.items():widget.configure(foreground='#ef7800'if row.get(key)!=self.stock_port_records[row['id']].get(key)else '#17243d')
@@ -375,8 +420,12 @@ class WorldBrowser:
             key=(id(self.rom),row['id'])
             if key!=self.item_picture_key:
                 self.item_photo=ImageTk.PhotoImage(picture(self.rom,row['id']),master=self.item_picture);self.item_picture.configure(image=self.item_photo);self.item_picture_key=key
-            self.item_picture.pack(before=self.item_description,anchor='w',pady=(0,8))
-        else:self.item_picture.pack_forget()
+            from item_prices import price
+            rank=__import__('items').weapon_rank(self.rom,row['id'])
+            self.item_meta.configure(text='Base price: '+__import__('currency').item_price(price(self.editor.project,row['id']))+(f'\nWeapon rank: {rank}'if rank else ''))
+            self.item_picture.pack(side='left',before=self.item_meta)
+            self.item_profile.pack(before=self.item_description,anchor='w',pady=(0,8))
+        else:self.item_profile.pack_forget()
         if is_item:self.goods_edit_frame.pack_forget();self.goods_enable_box.pack_forget();self.item_editor.pack(fill='x');self.item_editor.show()
         else:self.item_editor.pack_forget();self.goods_enable_box.pack(anchor='w');self.goods_edit_frame.pack(fill='x')
         self.goods_tree.delete(*self.goods_tree.get_children())
@@ -410,7 +459,12 @@ class WorldBrowser:
     def pick_selling_port(self,event=None):
         selected=self.goods_tree.selection()
         if selected:
+            if self.view=='Goods'and int(selected[0])!=self.good_port_selected and not self.commit_edits():
+                if self.good_port_selected is not None and self.goods_tree.exists(str(self.good_port_selected)):self.goods_tree.selection_set(str(self.good_port_selected))
+                else:self.goods_tree.selection_remove(*selected)
+                return
             self.good_port_selected=int(selected[0])
+            if self.view=='Goods'and self.goods_tree.exists(selected[0])and self.goods_tree.selection()!=selected:self.goods_tree.selection_set(selected[0])
             if self.view=='Items':self.item_editor.show()
             else:self.sync_goods_editor()
             self.draw_map()
@@ -429,7 +483,9 @@ class WorldBrowser:
         if port is None or port<0:port=0
         self.goods_port_box.current(port)
         source=next((o for o in next(g for g in self.records if g['id']==self.selected)['sources']if o['port']==port),None)
-        self.goods_gate.set(str(source['economy_required']if source and not self.goods_hidden()else 0))
+        draft=self.goods_pending
+        value=draft[2]if draft and draft[:2]==(port,self.selected)else str(source['economy_required']if source and not self.goods_hidden()else 0)
+        self.goods_gate.set(value)
         stock=next(g for g in self.stock_goods_records if g['id']==self.selected)['sources']
         self.goods_gate_box.configure(style='Changed.TSpinbox'if source and source not in stock else 'TSpinbox')
         self.add_good_button.configure(state='normal'if enabled and not source else 'disabled')
@@ -438,10 +494,14 @@ class WorldBrowser:
 
     def toggle_custom_goods(self):
         if not self.editor.project or self.goods_hidden():return
-        wanted=self.custom_goods_var.get();self.flush_goods_gate();self.editor.project.custom_goods=wanted;self.editor.update_status()
+        wanted=self.custom_goods_var.get()
+        if not self.commit_edits():self.custom_goods_var.set(self.editor.project.custom_goods);return
+        self.editor.project.custom_goods=wanted;self.editor.update_status()
 
     def select_edit_port(self,event=None):
-        port=self.goods_port_box.current();self.flush_goods_gate();self.good_port_selected=port
+        port=self.goods_port_box.current()
+        if not self.commit_edits():self.sync_goods_editor();return
+        self.good_port_selected=port
         if self.goods_tree.exists(str(port)):self.goods_tree.selection_set(str(port))
         else:self.goods_tree.selection_remove(*self.goods_tree.selection())
         self.sync_goods_editor();self.draw_map()
@@ -454,18 +514,31 @@ class WorldBrowser:
         self.goods_pending=(port,good,value)
         self.goods_edit_timer=self.editor.root.after(350,self.flush_goods_gate)
 
-    def flush_goods_gate(self):
-        if self.goods_edit_timer is None:return
-        self.editor.root.after_cancel(self.goods_edit_timer);self.goods_edit_timer=None
+    def cancel_goods_edit(self):
+        if self.goods_edit_timer is not None:self.editor.root.after_cancel(self.goods_edit_timer)
+        self.goods_edit_timer=None;self.goods_pending=None
+
+    def commit_edits(self):
+        try:self.item_editor.flush(strict=True);self.flush_goods_gate(strict=True);self.economy_panel.flush(strict=True)
+        except ValueError as error:self.editor.fail(error);return False
+        return True
+
+    def flush_goods_gate(self,strict=False):
+        if self.goods_pending is None:return
+        if self.goods_edit_timer is not None:self.editor.root.after_cancel(self.goods_edit_timer)
+        self.goods_edit_timer=None
         port,good,value=self.goods_pending
         project=self.editor.project
-        if not project or not project.custom_goods or self.goods_hidden():return
+        if not project or not project.custom_goods or self.goods_hidden():self.goods_pending=None;return
         from trade_goods import offers,change
-        if not 0<=port<100 or not any(o['good']==good for o in offers(project.rom,project.goods_edits)[port]):return
+        if not 0<=port<100 or not any(o['good']==good for o in offers(project.rom,project.goods_edits)[port]):self.goods_pending=None;return
         try:
             edits=change(project.rom,project.goods_edits,port,good,int(value))
-        except ValueError as error:self.editor.status.configure(text='Finish editing: '+str(error));return
-        project.goods_shuffle=dict(seed=None,mode='normal');project.goods_edits=edits;self.editor.update_status()
+        except ValueError:
+            error=ValueError('Goods requirements must be whole numbers from 0 to 2550 in steps of 10. Correct the entry or use Restore good.')
+            if strict:raise error
+            self.editor.status.configure(text='Finish editing: '+str(error));return
+        self.goods_pending=None;project.goods_shuffle=dict(seed=None,mode='normal');project.goods_edits=edits;self.editor.update_status()
 
     def add_good_port(self):
         project=self.editor.project
@@ -479,7 +552,7 @@ class WorldBrowser:
     def remove_good_port(self):
         project=self.editor.project
         if not project or not project.custom_goods or self.view!='Goods'or self.goods_hidden():return
-        self.flush_goods_gate()
+        if not self.commit_edits():return
         from trade_goods import change
         project.goods_edits=change(project.rom,project.goods_edits,self.goods_port_box.current(),self.selected,remove=True);project.goods_shuffle=dict(seed=None,mode='normal')
         self.editor.update_status()
@@ -487,7 +560,7 @@ class WorldBrowser:
     def restore_good(self):
         project=self.editor.project
         if not project or not project.custom_goods or self.view!='Goods'or self.goods_hidden():return
-        if self.goods_edit_timer is not None:self.editor.root.after_cancel(self.goods_edit_timer);self.goods_edit_timer=None
+        self.cancel_goods_edit()
         try:
             from trade_goods import offers,stock_offers,validate
             stock=stock_offers(project.rom);current=offers(project.rom,project.goods_edits)
@@ -528,3 +601,4 @@ class WorldBrowser:
             canvas.create_line(x,y-10,x,y+10,fill='#ee4035',width=1,tags=marker_tag)
         prefix=(str(len(members))+' selling ports — ')if self.view in ('Goods','Items')else ((self.region.get()+' — '+str(len(members))+' ports\n')if members else 'ROM world map — ')
         self.map_caption.configure(text=prefix+row['name'])
+

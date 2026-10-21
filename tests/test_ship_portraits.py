@@ -1,4 +1,5 @@
 """Portrait conversion, portable projects and exact exported graphics."""
+from legacy_manifest import legacy_manifest
 import os,sys,tempfile,json,unittest,copy
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
@@ -75,15 +76,15 @@ class PortraitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory()as f:
             path=Path(f)/'bad.json'
             for entries in invalid:
-                m=copy.deepcopy(before);m['portraits']=entries;path.write_text(json.dumps(m))
+                m=copy.deepcopy(before);m['portraits']=entries;path.write_text(json.dumps(legacy_manifest(m)))
                 with self.assertRaises(ValueError):self.p.load_project(path)
                 self.assertEqual(self.p.manifest(),before)
         with self.assertRaises(ValueError):self.p.set_portrait(10,b'bad')
         with self.assertRaises(ValueError):self.p.set_portrait(True,self.raw)
     def test_legacy_schema_five(self):
-        m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m['version']=5;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None)
+        m=self.p.manifest();m.pop('gameplay');m.pop('character_edits');m.pop('free_agent_shuffle');m.pop('portraits');m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=5;m.pop('shipbuilding_shuffle',None);m.pop('goods_shuffle',None);m.pop('item_special_only',None);m.pop('item_blind',None);m.pop('item_special',None);m.pop('item_seed',None);m.pop('custom_items',None);m.pop('item_edits',None);m.pop('custom_ships',None);m.pop('custom_goods',None);m.pop('custom_economy',None);m.pop('custom_mates',None);m.pop('custom_captains',None);m.pop('economy_edits',None);m.pop('goods_edits',None)
         with tempfile.TemporaryDirectory()as f:
-            path=Path(f)/'legacy.json';path.write_text(json.dumps(m));self.p.set_portrait(10,self.raw);self.p.load_project(path)
+            path=Path(f)/'legacy.json';path.write_text(json.dumps(legacy_manifest(m)));self.p.set_portrait(10,self.raw);self.p.load_project(path)
             self.assertEqual(self.p.portraits,{})
     def test_overlap_refused_and_all_options_compose(self):
         data=bytearray(self.p.rom+b'\xff'*0x200000);data[art.SLOTS+10*4096]=0

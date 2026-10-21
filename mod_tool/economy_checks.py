@@ -36,6 +36,10 @@ def run(Editor,rom,report):
    assert p.entries['economy'].cget('style')=='Changed.TSpinbox'and 'Changed.'in app.world_nav.cget('style')
    before=copy.deepcopy(app.project.economy_edits)
    edit(p.entries['economy'],'');assert app.project.economy_edits==before
+   with patch('tkinter.filedialog.asksaveasfilename')as picker:app.save_project()
+   picker.assert_not_called();assert errors and p.variables['economy'].get()=='';errors.clear()
+   w.mode.set('Goods');w.change_mode();assert w.view=='Economy'and w.mode.get()=='Economy'
+   assert errors;errors.clear()
    edit(p.entries['economy'],600)
    with tempfile.TemporaryDirectory()as d:
     path=Path(d)/'economy.json';out=Path(d)/'economy.sfc';app.project.save_project(path);q=ShipProject(rom);q.load_project(path);assert q.economy_edits==app.project.economy_edits
@@ -70,7 +74,7 @@ def run(Editor,rom,report):
     x=p.apply_button.winfo_rootx()+p.apply_button.winfo_width()//2;y=p.apply_button.winfo_rooty()+p.apply_button.winfo_height()//2
     assert root.winfo_containing(x,y)==p.apply_button,(size,'clipped batch button')
    assert app.project.build()==(app.project.rom,[])and not errors,errors
-  report.write_text(json.dumps(dict(status='PASS',automatic_single_port_edits=True,trade_and_ship_unlocks_update=True,information_hub_read_only=True,regional_preview_is_nonmutating=True,whole_region_ignores_search_filter=True,bulk_preserves_other_regions_and_blank_fields=True,restore_port_and_region=True,pending_edit_identity=True,project_rom_ips_roundtrip=True,global_reset=True,responsive_controls=True),indent=2),encoding='utf-8')
+  report.write_text(json.dumps(dict(status='PASS',invalid_drafts_preserved_and_block_save_navigation=True,automatic_single_port_edits=True,trade_and_ship_unlocks_update=True,information_hub_read_only=True,regional_preview_is_nonmutating=True,whole_region_ignores_search_filter=True,bulk_preserves_other_regions_and_blank_fields=True,restore_port_and_region=True,pending_edit_identity=True,project_rom_ips_roundtrip=True,global_reset=True,responsive_controls=True),indent=2),encoding='utf-8')
  except Exception as error:
   report.write_text(json.dumps(dict(status='FAIL',error=repr(error)),indent=2),encoding='utf-8');raise
  finally:root.destroy()

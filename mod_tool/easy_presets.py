@@ -19,6 +19,15 @@ PRESETS={
  'Random Shipyards':'Shuffle stock building-location groups among the original 25 ships only. Preserve ship stats, prices, industry requirements and added ships; respect fixed-capital restrictions.',
  'New Faces':'Shuffle first and last names independently for free agents and fleet captains. Keep attributes, skills, portraits and starting ports unchanged.',
 }
+# Older preset plans remain available to existing scripts, not in the menu.
+LEGACY_PRESETS=PRESETS
+PRESETS={
+ 'Classic Plus':LEGACY_PRESETS['Classic Plus'],
+ 'Hard Mode':'Naval Challenge plus noncapital shipbuilding at 75% of stock. Goods economy and fixed capital industry stay unchanged. Advanced ships require more investment; no shuffles.',
+ 'Naval Challenge':LEGACY_PRESETS['Naval Challenge'],
+ 'Trade & Exploration':'Starting goods economy +25% and shipbuilding +10%, capped at 1000, with goods unlock requirements at 80% of stock. Preserve goods locations, prices, ships and people; no shuffles.',
+ 'Full Randomizer':LEGACY_PRESETS['Full Randomizer'],
+}
 RANDOMIZED={'Fresh World','Full Randomizer','Uncharted Challenge','Unknown Recruits','Hidden Treasures','New Faces','Random Shipyards'}
 ALIASES={'Busy Ports':'Prosperous World','Stronger Flagships':'legacy_flagships','Stronger Fleets':'legacy_fleets','Random Mates':'legacy_mates','Random Items':'legacy_items','Skilled Recruits':'legacy_recruits'}
 
@@ -66,40 +75,20 @@ def _items(project,seed,blind,scope):
 
 
 def _goods(project,seed,blind,scope):
- from trade_goods import seeded_shuffle,offers,validate
- generated=offers(project.rom,seeded_shuffle(project.rom,seed,scope,blind));current=offers(project.rom,project.goods_edits)
- if scope=='normal':
-  rows=[[copy.deepcopy(o)for o in generated[p]if o['kind']=='Regional']+[copy.deepcopy(o)for o in current[p]if o['kind']=='Specialty']for p in range(100)]
-  # Preserve the fixed specialty even when it differs from stock. Repair a
-  # collision by swapping only regional good/price bundles.
-  rng=random.Random('NH-preset-goods-v1:'+seed+':'+str(blind))
-  slots=[(p,i)for p,row in enumerate(rows)for i,o in enumerate(row)if o['kind']=='Regional']
-  for p,row in enumerate(rows):
-   for i,o in enumerate(row):
-    if o['kind']!='Regional'or sum(x['good']==o['good']for x in row)<2:continue
-    candidates=[(q,j)for q,j in slots if q!=p and all(x['good']!=rows[q][j]['good']for k,x in enumerate(row)if k!=i)and all(x['good']!=o['good']for k,x in enumerate(rows[q])if k!=j)]
-    if not candidates:raise ValueError('Normal goods conflict with fixed specialties. Restore goods or use Full Randomizer.')
-    q,j=rng.choice(candidates)
-    for field in ('good','price'):o[field],rows[q][j][field]=rows[q][j][field],o[field]
- else:rows=generated
- # Existing economy requirements are independent of shuffled goods.
- for p,row in enumerate(rows):
-  old={kind:[o for o in current[p]if o['kind']==kind]for kind in ('Regional','Specialty')};indices={'Regional':0,'Specialty':0}
-  for offer in row:
-   kind=offer['kind'];i=indices[kind];indices[kind]+=1
-   if i<len(old[kind]):offer['economy_required']=old[kind][i]['economy_required']
- edits=validate(project.rom,[dict(port=p,offers=row)for p,row in enumerate(rows)])
- config=dict(seed=seed,mode=scope)
- if blind or(scope!='all'and project.goods_shuffle.get('blind',False)):config['blind']=True
- return dict(goods_edits=edits,goods_shuffle=config)
+ from trade_goods import shuffle_plan
+ return shuffle_plan(project,seed,scope,blind)
 
 
 def plan(project,name,seed=None,blind=False):
  name=ALIASES.get(name,name)
- if name not in PRESETS and not name.startswith('legacy_'):raise ValueError('Choose a preset.')
+ if name not in PRESETS and name not in LEGACY_PRESETS and not name.startswith('legacy_'):raise ValueError('Choose a preset.')
  if type(blind)is not bool:raise ValueError('Invalid blind mode.')
  if name in RANDOMIZED or name in ('legacy_mates','legacy_items'):seed=validate_seed('0000'if seed is None else seed)
  if name=='Classic Plus':return dict(repair_safeguard=True)
+ if name=='Hard Mode':
+  result=plan(project,'Developing World');result.update(plan(project,'Naval Challenge'));return result
+ if name=='Trade & Exploration':
+  result=plan(project,'Prosperous World');result.update(plan(project,'Trade Opportunities'));return result
  if name in ('Prosperous World','Developing World'):
   from backend import CAPITALS
   rows=economy_values(project.rom,project.economy_edits);original=economy_stock(project.rom)

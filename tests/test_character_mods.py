@@ -1,4 +1,5 @@
 """Character edits and reproducible four-digit starting-port shuffles."""
+from legacy_manifest import legacy_manifest
 import sys,os,json,tempfile,unittest
 from pathlib import Path
 from collections import Counter
@@ -13,6 +14,37 @@ class CharacterModsTests(unittest.TestCase):
         path=Path(os.environ.get('NH_STOCK_ROM',str(ROOT/'New Horizons (USA).zip')))
         if not path.is_file():self.skipTest('Supply the stock ROM.')
         self.p=ShipProject(path);self.p.custom_mates=True;self.p.custom_captains=True;self.p.repair_safeguard=False
+
+    def test_restore_original_values_overrides_active_stat_and_skill_shuffles(self):
+        import copy
+        from sailors import CHARACTER_FIELD_OFFSETS
+        from custom_presets import starter
+        for role,ids in (('captains',CAPTAIN_IDS),('mates',MATE_IDS)):
+            with self.subTest(role=role):
+                p=starter(self.p,'Classic Plus + Harder')
+                stock=decode_sailors(p.rom)
+                fields=ATTRIBUTES+('skills',)
+                effective={(e['id'],e['field']):e['value']for e in p.effective_character_edits()}
+                target=next(i for i in ids if any(effective.get((i,k),stock[i][k])!=stock[i][k]for k in fields))
+                before=copy.deepcopy(p.free_agent_shuffle)
+                others=[e for e in p.effective_character_edits()if e['id']!=target]
+                p.restore_character(target)
+                self.assertEqual(p.free_agent_shuffle,before)
+                self.assertEqual([e for e in p.effective_character_edits()if e['id']!=target],others)
+                self.assertFalse(any(e['id']==target for e in p.effective_character_edits()))
+                data=p.build()[0]
+                for key in fields:
+                    expected=stock[target][key]
+                    actual=data[BASE+STRIDE*target+CHARACTER_FIELD_OFFSETS[key]]
+                    self.assertEqual(actual&31 if key=='skills'else actual,expected)
+                q=ShipProject(p.source);q.load_manifest(p.manifest())
+                self.assertEqual(q.build()[0],data)
+
+    def test_restore_character_rejects_invalid_target_without_mutation(self):
+        before=self.p.manifest()
+        for target in (None,True,-1,0,200):
+            with self.assertRaises(ValueError):self.p.restore_character(target)
+            self.assertEqual(self.p.manifest(),before)
 
     def test_seed_reproduces_and_modes_preserve_slots(self):
         stock={r['id']:r['starting_port']for r in decode_sailors(self.p.rom)if r['role']=='Free agent'}
@@ -47,7 +79,7 @@ class CharacterModsTests(unittest.TestCase):
         self.assertEqual(self.p.build(),(self.p.rom,[]))
 
     def test_invalid_edits_and_seeds_atomic(self):
-        for i,values in [(0,dict(luck=100)),(120,dict(luck=100)),(True,dict(luck=100)),(69,dict(age=25)),(69,dict(luck=True)),(69,dict(luck=101)),(69,dict(luck=-1)),(69,dict(leadership=99,luck='90'))]:
+        for i,values in [(120,dict(luck=100)),(True,dict(luck=100)),(69,dict(age=25)),(69,dict(luck=True)),(69,dict(luck=101)),(69,dict(luck=-1)),(69,dict(leadership=99,luck='90'))]:
             before=self.p.manifest()
             with self.assertRaises(ValueError):self.p.update_character(i,values)
             self.assertEqual(before,self.p.manifest())
@@ -69,9 +101,9 @@ class CharacterModsTests(unittest.TestCase):
             self.assertEqual(report['free_agent_shuffle'],self.p.free_agent_shuffle)
 
     def test_v6_projects_disable_new_features(self):
-        old=self.p.manifest();old['version']=6;old.pop('shipbuilding_shuffle',None);old.pop('goods_shuffle',None);old.pop('item_special_only',None);old.pop('item_blind',None);old.pop('item_special',None);old.pop('item_seed',None);old.pop('custom_items',None);old.pop('item_edits',None);old.pop('custom_ships',None);old.pop('custom_goods',None);old.pop('custom_economy',None);old.pop('custom_mates',None);old.pop('custom_captains',None);old.pop('economy_edits',None);old.pop('goods_edits',None);old.pop('gameplay');old.pop('character_edits');old.pop('free_agent_shuffle')
+        old=self.p.manifest();old.pop('library_state',None);old.pop('ship_descriptions',None);old.pop('custom_characters',None);old['version']=6;old.pop('shipbuilding_shuffle',None);old.pop('goods_shuffle',None);old.pop('item_special_only',None);old.pop('item_blind',None);old.pop('item_special',None);old.pop('item_seed',None);old.pop('custom_items',None);old.pop('item_edits',None);old.pop('custom_ships',None);old.pop('custom_goods',None);old.pop('custom_economy',None);old.pop('custom_mates',None);old.pop('custom_captains',None);old.pop('economy_edits',None);old.pop('goods_edits',None);old.pop('gameplay');old.pop('character_edits');old.pop('free_agent_shuffle')
         with tempfile.TemporaryDirectory()as f:
-            path=Path(f)/'Old.json';path.write_text(json.dumps(old))
+            path=Path(f)/'Old.json';path.write_text(json.dumps(legacy_manifest(old)))
             self.p.update_character(79,dict(luck=0));self.p.set_free_agent_shuffle(True,'1234')
             self.p.load_project(path)
         self.assertEqual(self.p.character_edits,[])

@@ -1,4 +1,5 @@
 import sys,copy,tempfile,json,unittest
+from legacy_manifest import legacy_manifest
 from pathlib import Path
 from collections import Counter
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'mod_tool'))
@@ -41,7 +42,7 @@ class ShipbuildingShuffle(unittest.TestCase):
    self.assertEqual(apply_ips(p.rom,(f/'mod.ips').read_bytes()),q.build()[0]);report=json.loads((f/'mod.changes.json').read_text(encoding='utf-8'))
    self.assertEqual(report['original_availability'],[]);self.assertEqual(report['shipbuilding_shuffle'],dict(seed=None,blind=True))
    q.clear_shipbuilding_shuffle();self.assertEqual(q.original_availability,q.stock_availability);self.assertEqual(q.build()[0],q.rom)
-   m=q.manifest();m['version']=18;m.pop('shipbuilding_shuffle');(f/'old.json').write_text(json.dumps(m),encoding='utf-8');q.load_project(f/'old.json');self.assertEqual(q.shipbuilding_shuffle,default())
+   m=q.manifest();m.pop('library_state',None);m.pop('ship_descriptions',None);m.pop('custom_characters',None);m['version']=18;m.pop('shipbuilding_shuffle');(f/'old.json').write_text(json.dumps(legacy_manifest(m)),encoding='utf-8');q.load_project(f/'old.json');self.assertEqual(q.shipbuilding_shuffle,default())
  def test_manual_availability_replaces_metadata_but_stats_do_not(self):
   p=self.p;p.set_shipbuilding_shuffle('2026',True);p.update(0,dict(hull=31));self.assertTrue(p.shipbuilding_shuffle['blind'])
   p.update(0,dict(ports=[31]));self.assertEqual(p.shipbuilding_shuffle,default())

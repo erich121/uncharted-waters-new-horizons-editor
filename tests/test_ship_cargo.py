@@ -49,4 +49,67 @@ class CargoTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.p.update(13,dict(max_crew=500))
         self.assertEqual(self.p.ships[13],before)
 
+    def test_200_guns_and_2000_total_capacity_roundtrip(self):
+        from content_library import ContentLibrary,capture_ship
+        from backend import apply_ips
+        self.p.update(10,dict(max_guns=200,max_crew=500,capacity=2000))
+        self.p.add_ship(10)
+        self.p.update(25,dict(max_guns=200,max_crew=500,capacity=2000,factory_guns=200,factory_crew=500))
+        data,_=self.p.build()
+        self.assertEqual(decode(data)[10]['max_guns'],200)
+        self.assertEqual(decode(data)[10]['capacity'],2000)
+        self.assertEqual(data[0x210000+20],200)
+        self.assertEqual(data[0x2100fa+8],200)
+        self.assertEqual(data[0x2100fa+4],50)
+        self.assertEqual(decode(data)[10]['max_crew'],500)
+        self.assertEqual(int.from_bytes(data[0x2100fa+6:0x2100fa+8],'little'),2000)
+        self.assertEqual(self.p.ships[25]['factory_cargo'],1300)
+        self.assertEqual(self.p.ships[25]['factory_guns']+self.p.ships[25]['factory_crew']+self.p.ships[25]['factory_cargo'],2000)
+        with tempfile.TemporaryDirectory()as folder:
+            folder=Path(folder);lib=ContentLibrary(self.p.rom,folder/'library');entry=capture_ship(self.p,25);lib.put(entry)
+            self.assertEqual(ContentLibrary(self.p.rom,folder/'library').entries[0]['ship']['factory_guns'],200)
+            path=folder/'Ships.json';self.p.save_project(path);loaded=ShipProject(self.p.source);loaded.load_project(path)
+            self.assertEqual(loaded.ships,self.p.ships)
+            target=folder/'Ships.sfc';loaded.export(target)
+            self.assertEqual(apply_ips(self.p.rom,target.with_suffix('.ips').read_bytes()),target.read_bytes())
+        for index in (10,25):
+            before=dict(self.p.ships[index])
+            for change in (dict(max_guns=201),dict(max_crew=510),dict(capacity=2001)):
+                with self.assertRaises(ValueError):self.p.update(index,change)
+                self.assertEqual(self.p.ships[index],before)
+        with self.assertRaises(ValueError):self.p.update(25,dict(factory_guns=201))
+
+    def test_lower_crew_limit_trims_starting_spaces_and_persists(self):
+        from custom_presets import prepare
+        from content_library import capture_ship,validate_ship
+        before=dict(self.p.ships[10]);self.assertGreater(before['factory_crew'],50)
+        self.p.update(10,dict(max_crew=50,min_crew=1))
+        row=self.p.ships[10]
+        self.assertEqual(row['factory_crew'],50)
+        self.assertEqual(row['capacity'],before['capacity'])
+        self.assertEqual(row['factory_cargo'],before['factory_cargo']+before['factory_crew']-50)
+        data,_=self.p.build();actual=decode(data)[10]
+        self.assertEqual(actual['factory_crew'],50);self.assertEqual(actual['min_crew'],1)
+        self.assertEqual(actual['max_crew'],50);self.assertEqual(actual['factory_cargo'],row['factory_cargo'])
+        self.assertEqual(prepare(self.p,self.p.manifest()).ships,self.p.ships)
+        entry=capture_ship(self.p,10);self.assertEqual(validate_ship(entry,self.p.rom)['ship']['factory_crew'],50)
+        with tempfile.TemporaryDirectory()as folder:
+            path=Path(folder)/'Crew.json';self.p.save_project(path)
+            loaded=ShipProject(self.p.source);loaded.load_project(path)
+            self.assertEqual(loaded.build()[0],data)
+        self.p.update(10,dict(max_crew=100));self.assertEqual(self.p.ships[10]['factory_crew'],50)
+        self.p.add_ship(10);self.p.update(25,dict(max_crew=20))
+        self.assertEqual(self.p.ships[25]['factory_crew'],20)
+        data,_=self.p.build();self.assertEqual(int.from_bytes(data[0x210000+21:0x210000+23],'little'),20)
+        self.assertEqual(prepare(self.p,self.p.manifest()).ships,self.p.ships)
+
+    def test_crew_floor_and_invalid_fittings_remain_atomic(self):
+        self.p.update(10,dict(min_crew=1,max_crew=10));self.assertEqual(self.p.ships[10]['factory_crew'],10)
+        before=self.p.manifest()
+        for values in (dict(min_crew=0),dict(max_crew=0),dict(max_crew=1),dict(max_crew=15),dict(min_crew=11)):
+            with self.subTest(values=values),self.assertRaises(ValueError):self.p.update(10,values)
+            self.assertEqual(self.p.manifest(),before)
+        self.p.add_ship(10)
+        with self.assertRaises(ValueError):self.p.update(25,dict(max_crew=10,factory_crew=20))
+
 if __name__=='__main__':unittest.main()
