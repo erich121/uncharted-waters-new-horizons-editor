@@ -4,7 +4,7 @@
 
 New Horizons Editor is an open source ROM editor, content creator, and randomizer for the USA SNES version of *Uncharted Waters: New Horizons*. It provides a graphical interface for modifying ships, characters, ports, economies, discoveries, and gameplay mechanics without requiring programming or manual ROM editing.
 
-The editor supports thousands of customizable values, along with custom presets, seeded randomization, and AI assisted game creation. Version 1.1.0 includes **5 more in game ship slots**  **35 custom ship designs** and **98 new discoveries**, complete with original artwork and descriptions.
+The editor supports thousands of customizable values, along with custom presets, seeded randomization, and AI assisted game creation. Version 1.1.0 includes **5 more in game ship slots**,  **35 custom ship designs** and **98 new discoveries**, complete with original artwork and descriptions.
 
 Custom content can be stored in a personal Library, reused across projects, or shared with other players. Complete game configurations can also be exchanged through project files, allowing others to load, modify, and build upon existing creations.
 
